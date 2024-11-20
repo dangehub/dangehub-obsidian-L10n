@@ -61,6 +61,11 @@ export class ChangeRecorder {
     }
 
     recordChange(element: Element, oldText: string, newText: string) {
+        // 检查元素是否属于控制面板
+        if (element.closest('.translation-control-panel')) {
+            return; // 如果是控制面板中的元素，直接返回
+        }
+
         console.log('记录变更:', { oldText, newText });
         this.changes.push({
             element,

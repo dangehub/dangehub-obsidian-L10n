@@ -212,4 +212,27 @@ export class TranslationService {
             }
         }
     }
+
+    // 获取所有规则
+    getAllRules(): TranslationRule[] {
+        return Array.from(this.rules.values());
+    }
+
+    // 删除指定规则
+    deleteRules(ruleKeys: string[]) {
+        ruleKeys.forEach(key => {
+            this.rules.delete(key);
+        });
+        
+        // 如果翻译已启用，重新应用剩余规则
+        if (this.isEnabled) {
+            this.restoreOriginalTexts();
+            this.applyAllRules();
+        }
+    }
+
+    // 获取规则数量
+    getRuleCount(): number {
+        return this.rules.size;
+    }
 }

@@ -1,10 +1,12 @@
 import { Plugin, Notice } from 'obsidian';
 import { TranslationService } from './TranslationService';
 import { ChangeRecorder } from './ChangeRecorder';
+import { ControlWindow } from './ControlWindow';
 
 export default class TranslationPlugin extends Plugin {
     private translationService: TranslationService;
     private changeRecorder: ChangeRecorder;
+    private controlWindow: ControlWindow;
 
     async onload() {
         console.log('加载翻译插件');
@@ -58,6 +60,18 @@ export default class TranslationPlugin extends Plugin {
                 this.translationService.saveRules();
             }
         });
+
+        // 添加控制面板命令
+        this.addCommand({
+            id: 'open-translation-panel',
+            name: '打开翻译控制面板',
+            callback: () => {
+                if (!this.controlWindow) {
+                    this.controlWindow = new ControlWindow(this);
+                }
+                this.controlWindow.open();
+            }
+        });
     }
 
     private getCurrentPluginId(): string {
@@ -68,5 +82,52 @@ export default class TranslationPlugin extends Plugin {
     onunload() {
         this.translationService.destroy();
         console.log('卸载翻译插件');
+        if (this.controlWindow) {
+            this.controlWindow.close();
+            this.controlWindow.destroy();
+        }
+    }
+
+    // 提供给控制面板使用的方法
+    startRecording() {
+        this.changeRecorder.startRecording();
+        new Notice('开始记录翻译修改');
+    }
+
+    stopRecording() {
+        const changes = this.changeRecorder.stopRecording();
+        if (changes.length > 0) {
+            const pluginId = this.getCurrentPluginId();
+            const rules = this.changeRecorder.generateRules(pluginId);
+            rules.forEach(rule => this.translationService.addRule(rule));
+            this.translationService.saveRules();
+            new Notice(`已生成 ${rules.length} 条翻译规则`);
+        } else {
+            new Notice('未检测到任何文本修改');
+        }
+    }
+
+    isTranslationEnabled(): boolean {
+        return this.translationService.isTranslationEnabled;
+    }
+
+    toggleTranslation() {
+        if (this.isTranslationEnabled()) {
+            this.translationService.disable();
+            new Notice('翻译已停用');
+        } else {
+            this.translationService.enable();
+            new Notice('翻译已启用');
+        }
+        this.translationService.saveRules();
+    }
+
+    getAllRules(): TranslationRule[] {
+        return this.translationService.getAllRules();
+    }
+
+    deleteRules(ruleKeys: string[]) {
+        this.translationService.deleteRules(ruleKeys);
+        this.translationService.saveRules();
     }
 }

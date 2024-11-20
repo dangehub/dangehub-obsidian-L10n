@@ -6,3 +6,57 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.translation-control-panel {
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--background-modifier-box-shadow);
+    overflow: hidden;
+}
+
+.translation-control-panel .drag-handle {
+    padding: 8px 12px;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    cursor: move;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+}
+
+.translation-control-panel .close-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.translation-control-panel .button-container {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.translation-control-panel .rules-container {
+    max-height: calc(70vh - 120px);
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.translation-control-panel .rule-item {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.translation-control-panel .recording {
+    background-color: var(--color-red);
+    color: white;
+}
