@@ -191,25 +191,96 @@ export class TranslationService {
         return `${pluginId}:${selector}:${originalText}`;
     }
 
-    // 保存规则到本地
-    async saveRules() {
-        const data = {
-            rules: Array.from(this.rules.values()),
-            isEnabled: this.isEnabled
-        };
-        await this.plugin.saveData(data);
+    private async ensureTranslationDir(pluginId: string): Promise<string> {
+        // 使用 vault 根目录作为基准
+        const baseDir = '.obsidian/plugins/aqu-L10n/translation/zh-cn';
+        const pluginDir = `${baseDir}/${pluginId}`;
+        
+        // 确保目录存在
+        if (!await this.plugin.app.vault.adapter.exists(baseDir)) {
+            await this.plugin.app.vault.adapter.mkdir(baseDir);
+        }
+        if (!await this.plugin.app.vault.adapter.exists(pluginDir)) {
+            await this.plugin.app.vault.adapter.mkdir(pluginDir);
+        }
+        
+        return pluginDir;
     }
 
-    // 加载本地规则
+    async saveRules() {
+        // 按插件ID分组规则
+        const rulesByPlugin = new Map<string, TranslationRule[]>();
+        this.rules.forEach(rule => {
+            if (!rulesByPlugin.has(rule.pluginId)) {
+                rulesByPlugin.set(rule.pluginId, []);
+            }
+            rulesByPlugin.get(rule.pluginId)?.push(rule);
+        });
+
+        // 分别保存每个插件的规则
+        for (const [pluginId, rules] of rulesByPlugin) {
+            try {
+                // 获取目标插件的版本号
+                const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
+                if (!targetPlugin) {
+                    console.error(`找不到插件: ${pluginId}`);
+                    continue;
+                }
+                
+                const version = targetPlugin.manifest.version;
+                const dir = await this.ensureTranslationDir(pluginId);
+                const filePath = `${dir}/${version}.json`;
+                
+                await this.plugin.app.vault.adapter.write(
+                    filePath,
+                    JSON.stringify(rules, null, 2)
+                );
+            } catch (error) {
+                console.error(`保存插件 ${pluginId} 的规则时出错:`, error);
+            }
+        }
+
+        // 保存启用状态
+        await this.plugin.saveData({
+            isEnabled: this.isEnabled
+        });
+    }
+
     async loadRules() {
+        // 加载启用状态
         const data = await this.plugin.loadData();
-        if (data) {
-            if (data.rules) {
-                data.rules.forEach(rule => this.addRule(rule));
+        if (data?.isEnabled) {
+            this.isEnabled = true;
+        }
+
+        const baseDir = '.obsidian/plugins/aqu-L10n/translation/zh-cn';
+        if (await this.plugin.app.vault.adapter.exists(baseDir)) {
+            // 获取所有插件目录
+            const pluginDirs = await this.plugin.app.vault.adapter.list(baseDir);
+            
+            // 遍历所有插件目录加载规则
+            for (const pluginDir of pluginDirs.folders) {
+                try {
+                    const pluginId = pluginDir.split('/').pop() || '';
+                    const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
+                    if (!targetPlugin) continue;
+
+                    const version = targetPlugin.manifest.version;
+                    const rulesPath = `${pluginDir}/${version}.json`;
+                    
+                    if (await this.plugin.app.vault.adapter.exists(rulesPath)) {
+                        const rulesJson = await this.plugin.app.vault.adapter.read(rulesPath);
+                        const rules = JSON.parse(rulesJson);
+                        rules.forEach((rule: TranslationRule) => this.addRule(rule));
+                    }
+                } catch (error) {
+                    console.error(`加载插件规则时出错:`, error);
+                }
             }
-            if (data.isEnabled) {
-                this.enable();
-            }
+        }
+
+        if (this.isEnabled) {
+            this.enable();
         }
     }
 

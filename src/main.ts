@@ -76,7 +76,18 @@ export default class TranslationPlugin extends Plugin {
 
     private getCurrentPluginId(): string {
         const activeTab = document.querySelector('.vertical-tab-nav-item.is-active');
-        return activeTab?.textContent?.trim() || '未知插件';
+        if (!activeTab) return '';
+        
+        // 尝试从 data-tab-id 获取插件ID
+        const tabId = activeTab.getAttribute('data-tab-id');
+        if (tabId?.startsWith('plugin-')) {
+            return tabId.replace('plugin-', '');
+        }
+        
+        // 如果没有 data-tab-id，尝试从文本内容获取
+        const pluginName = activeTab.textContent?.trim().toLowerCase() || '';
+        // 将插件名称转换为插件ID格式（如 Dataview -> dataview）
+        return pluginName;
     }
 
     onunload() {
