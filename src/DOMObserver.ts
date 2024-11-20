@@ -13,6 +13,12 @@ export class DOMObserver {
     checkAndObserve() {
         console.log('检查设置页面...');
         
+        // 如果已经在观察中且按钮存在，则不需要重新初始化
+        if (this.observing && this.scanButton) {
+            console.log('已经在观察中且按钮存在');
+            return;
+        }
+        
         // 修改选择器以匹配设置窗口
         const settingsModal = document.querySelector('.modal.mod-settings');
         if (!settingsModal) {
