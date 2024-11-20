@@ -1,63 +1,72 @@
 import { Plugin, Notice } from 'obsidian';
-import { DOMObserver } from './DOMObserver';
 import { TranslationService } from './TranslationService';
-import { TranslationSettingTab } from './TranslationSettingTab';
+import { ChangeRecorder } from './ChangeRecorder';
 
 export default class TranslationPlugin extends Plugin {
-    public translationService: TranslationService;
-    private domObserver: DOMObserver;
-    private settingTab: TranslationSettingTab;
+    private translationService: TranslationService;
+    private changeRecorder: ChangeRecorder;
 
     async onload() {
         console.log('加载翻译插件');
         
-        this.translationService = new TranslationService();
-        await this.translationService.loadData();
-        
-        this.domObserver = new DOMObserver(this);
-        
-        this.settingTab = new TranslationSettingTab(this.app, this);
-        this.addSettingTab(this.settingTab);
-        
+        this.translationService = new TranslationService(this);
+        this.changeRecorder = new ChangeRecorder(this);
+
+        // 加载已保存的规则
+        await this.translationService.loadRules();
+
+        // 添加记录命令
         this.addCommand({
-            id: 'open-translation-settings',
-            name: '打开翻译设置',
+            id: 'start-translation-recording',
+            name: '开始记录翻译修改',
             callback: () => {
-                this.app.setting.open();
-                this.app.setting.openTabById(this.manifest.id);
+                this.changeRecorder.startRecording();
+                new Notice('开始记录翻译修改\n请打开开发者工具进行文本修改');
             }
         });
 
         this.addCommand({
-            id: 'scan-current-plugin-settings',
-            name: '扫描当前插件设置文本',
+            id: 'stop-translation-recording',
+            name: '停止记录并生成规则',
             callback: () => {
-                console.log('手动触发扫描');
-                this.domObserver.checkAndObserve();
+                const changes = this.changeRecorder.stopRecording();
+                if (changes.length > 0) {
+                    const pluginId = this.getCurrentPluginId();
+                    const rules = this.changeRecorder.generateRules(pluginId);
+                    rules.forEach(rule => this.translationService.addRule(rule));
+                    this.translationService.saveRules();
+                    new Notice(`已生成 ${rules.length} 条翻译规则`);
+                } else {
+                    new Notice('未检测到任何文本修改');
+                }
             }
         });
 
-        this.registerEvent(
-            this.app.workspace.on('layout-change', () => {
-                console.log('布局变化事件触发');
-                setTimeout(() => {
-                    this.domObserver.checkAndObserve();
-                }, 300);
-            })
-        );
-
-        document.addEventListener('click', (e) => {
-            const target = e.target as Element;
-            if (target.closest('.vertical-tab-nav-item')) {
-                console.log('检测到设置标签切换');
-                setTimeout(() => {
-                    this.domObserver.checkAndObserve();
-                }, 100);
+        // 添加切换翻译命令
+        this.addCommand({
+            id: 'toggle-translation',
+            name: '切换翻译状态',
+            callback: () => {
+                const isEnabled = this.translationService.isTranslationEnabled;
+                if (isEnabled) {
+                    this.translationService.disable();
+                    new Notice('翻译已停用');
+                } else {
+                    this.translationService.enable();
+                    new Notice('翻译已启用');
+                }
+                this.translationService.saveRules();
             }
         });
     }
 
-    async onunload() {
-        this.domObserver.disconnect();
+    private getCurrentPluginId(): string {
+        const activeTab = document.querySelector('.vertical-tab-nav-item.is-active');
+        return activeTab?.textContent?.trim() || '未知插件';
     }
-} 
+
+    onunload() {
+        this.translationService.destroy();
+        console.log('卸载翻译插件');
+    }
+}
