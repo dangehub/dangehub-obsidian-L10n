@@ -1,0 +1,11 @@
+{
+	"id": "aqu-L10n",
+	"name": "L10n",
+	"version": "0.0.1",
+	"minAppVersion": "0.15.0",
+	"description": "Localization other plugins for obsidian.",
+	"author": "dangehub",
+	"authorUrl": "https://github.com/dangehub",
+	"fundingUrl": "",
+	"isDesktopOnly": false
+}
