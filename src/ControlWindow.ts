@@ -209,7 +209,6 @@ export class ControlWindow {
         if (!list) return;
 
         list.innerHTML = '';
-
         let rules = this.plugin.getAllRules();
 
         if (selectedPluginId) {
@@ -227,20 +226,44 @@ export class ControlWindow {
         rules.forEach((rule: TranslationRule) => {
             const ruleEl = document.createElement('div');
             ruleEl.classList.add('rule-item');
-            ruleEl.style.padding = '5px';
-            ruleEl.style.borderBottom = '1px solid var(--background-modifier-border)';
-
-            ruleEl.innerHTML = `
-                <span><strong>原文:</strong> ${rule.originalText}</span><br>
-                <span><strong>译文:</strong> ${rule.translatedText}</span>
-                <button class="delete-button" style="float: right;">删除</button>
-            `;
-
-            const deleteButton = ruleEl.querySelector('.delete-button') as HTMLButtonElement;
+            
+            // 创建原文显示
+            const originalText = document.createElement('div');
+            originalText.innerHTML = `<strong>原文:</strong> ${rule.originalText}`;
+            
+            // 创建译文输入框
+            const translationContainer = document.createElement('div');
+            const translationInput = document.createElement('input');
+            translationInput.type = 'text';
+            translationInput.value = rule.translatedText;
+            translationInput.style.width = '100%';
+            translationInput.style.marginTop = '4px';
+            translationInput.placeholder = '输入译文...';
+            
+            // 添加输入事件
+            translationInput.addEventListener('change', () => {
+                const updatedRule = {
+                    ...rule,
+                    translatedText: translationInput.value
+                };
+                this.plugin.updateRule(updatedRule);
+            });
+            
+            translationContainer.innerHTML = '<strong>译文:</strong> ';
+            translationContainer.appendChild(translationInput);
+            
+            // 创建删除按钮
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = '删除';
+            deleteButton.style.float = 'right';
             deleteButton.onclick = () => {
                 this.plugin.deleteRules([this.plugin.generateRuleKey(rule.pluginId, rule.selector, rule.originalText)]);
             };
-
+            
+            // 组装规则项
+            ruleEl.appendChild(originalText);
+            ruleEl.appendChild(translationContainer);
+            ruleEl.appendChild(deleteButton);
             list.appendChild(ruleEl);
         });
     }

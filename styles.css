@@ -63,6 +63,15 @@ If your plugin does not need CSS, delete this file.
     border-bottom: 1px solid var(--background-modifier-border);
 }
 
+.translation-control-panel .rule-item input {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 4px 0;
+    width: calc(100% - 60px); /* 减去删除按钮的宽度 */
+}
+
 .translation-control-panel .recording {
     background-color: var(--color-red);
     color: white;
@@ -139,4 +148,8 @@ If your plugin does not need CSS, delete this file.
 
 .translation-control-panel .resize-handle:hover {
     opacity: 1;
+}
+
+.translation-control-panel .rule-item button {
+    margin-left: 8px;
 }

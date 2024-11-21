@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import fs from "fs-extra";
 
 const banner =
 `/*
@@ -10,6 +11,13 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
+
+// 确保dist目录存在
+fs.ensureDirSync("dist");
+
+// 复制必要文件到dist目录
+fs.copySync("manifest.json", "dist/manifest.json");
+fs.copySync("styles.css", "dist/styles.css");
 
 const context = await esbuild.context({
 	banner: {
@@ -37,7 +45,7 @@ const context = await esbuild.context({
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
-	outfile: "main.js",
+	outfile: "dist/main.js",
 	minify: prod,
 });
 
