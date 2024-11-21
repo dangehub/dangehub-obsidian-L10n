@@ -7,6 +7,8 @@ export class TranslationService {
     private originalTexts: Map<string, string> = new Map();
     private observer: MutationObserver;
     private clickHandler: (e: MouseEvent) => void;
+    private modalObserver: MutationObserver;
+    private commandObserver: MutationObserver;
 
     constructor(private plugin: Plugin) {
         // 创建观察器来监听页面变化
@@ -46,6 +48,7 @@ export class TranslationService {
         if (!this.isEnabled) {
             this.isEnabled = true;
             this.startObserving();
+            this.setupModalHandling();
             this.applyAllRules();
             console.log('翻译已启用');
         }
@@ -56,6 +59,9 @@ export class TranslationService {
         if (this.isEnabled) {
             this.isEnabled = false;
             this.stopObserving();
+            if (this.commandObserver) {
+                this.commandObserver.disconnect();
+            }
             this.restoreOriginalTexts();
             console.log('翻译已停用');
         }
@@ -63,24 +69,30 @@ export class TranslationService {
 
     // 开始观察页面变化
     private startObserving() {
-        // 观察设置页面容器
-        const settingsContainer = document.querySelector('.vertical-tab-content-container');
-        if (settingsContainer) {
-            this.observer.observe(settingsContainer, {
-                childList: true,
-                subtree: true,
-                characterData: true
-            });
-            console.log('开始观察设置页面变化');
-        }
+        // 观察整个 document.body
+        this.observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+        console.log('开始观察页面变化');
 
         // 添加标签切换监听
         document.addEventListener('click', this.clickHandler);
+
+        // 添加 Modal 观察
+        this.observeModals();
     }
 
     // 停止观察
     private stopObserving() {
         this.observer.disconnect();
+        if (this.modalObserver) {
+            this.modalObserver.disconnect();
+        }
+        if (this.commandObserver) {
+            this.commandObserver.disconnect();
+        }
         document.removeEventListener('click', this.clickHandler);
         console.log('停止观察页面变化');
     }
@@ -111,6 +123,12 @@ export class TranslationService {
     destroy() {
         this.disable();
         this.observer.disconnect();
+        if (this.modalObserver) {
+            this.modalObserver.disconnect();
+        }
+        if (this.commandObserver) {
+            this.commandObserver.disconnect();
+        }
         document.removeEventListener('click', this.clickHandler);
     }
 
@@ -124,6 +142,15 @@ export class TranslationService {
     }
 
     addRule(rule: TranslationRule) {
+        // 如果规则没有pluginId，尝试从选择器推断
+        if (!rule.pluginId) {
+            const modalElement = document.querySelector(rule.selector)?.closest('.modal-container');
+            if (modalElement instanceof HTMLElement) {
+                rule.pluginId = this.getPluginIdFromModal(modalElement);
+                console.log('从弹窗推断插件ID:', rule.pluginId);
+            }
+        }
+
         // 检查是否已存在相同选择器的规则
         const existingRule = this.findExistingRuleBySelector(rule.selector);
         if (existingRule) {
@@ -349,7 +376,7 @@ export class TranslationService {
             }
         }
 
-        // 如果之前是启用状态，则应用规则
+        // 如果之前启用状态，则应用规则
         if (this.isEnabled) {
             this.enable();
         }
@@ -470,5 +497,150 @@ export class TranslationService {
             uniqueRules: new Set(rulesArray.map(r => this.generateRuleKey(r.pluginId, r.selector, r.originalText))).size,
             rules: rulesArray
         });
+    }
+
+    // 添加新方法专门处理弹窗
+    private observeModals() {
+        // 创建 Modal 观察器
+        const modalObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node instanceof HTMLElement) {
+                        // 检查是否是 Modal
+                        if (node.matches('.modal, .modal-container, .prompt, .dialog')) {
+                            console.log('检测到新的弹窗:', node);
+                            // 对新弹窗应用翻译规则
+                            setTimeout(() => {
+                                if (this.isEnabled) {
+                                    this.applyAllRules();
+                                }
+                            }, 50);
+                        }
+                    }
+                });
+            });
+        });
+
+        // 观察 document.body 以捕获所有新增的弹窗
+        modalObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // 保存观察器引用以便后续清理
+        this.modalObserver = modalObserver;
+    }
+
+    private setupModalHandling() {
+        // 监听命令面板的打开
+        const commandObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node instanceof HTMLElement) {
+                        // 检查是否是命令面板或其他弹窗
+                        if (node.matches('.modal-container, .prompt, .suggestion-container, .menu-dropdown')) {
+                            console.log('检测到新的弹窗/命令面板:', node);
+                            this.handleNewModal(node);
+                        }
+                    }
+                });
+            });
+        });
+
+        // 观察 document.body
+        commandObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // 保存观察器引用
+        this.commandObserver = commandObserver;
+    }
+
+    private handleNewModal(modalElement: HTMLElement) {
+        if (!this.isEnabled) return;
+
+        // 添加延迟确保弹窗内容已完全加载
+        setTimeout(() => {
+            // 先检查是否有匹配的规则
+            const modalTitle = modalElement.querySelector('.modal-title');
+            if (modalTitle) {
+                console.log('弹窗标题内容:', modalTitle.textContent);
+                console.log('现有规则:', Array.from(this.rules.values()));
+            }
+
+            this.applyRulesToElement(modalElement);
+            
+            // 创建内容观察器
+            const contentObserver = new MutationObserver((mutations) => {
+                if (this.isEnabled) {
+                    this.applyRulesToElement(modalElement);
+                }
+            });
+
+            contentObserver.observe(modalElement, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+
+            // 当弹窗关闭时清理观察器
+            const cleanup = () => {
+                if (!document.body.contains(modalElement)) {
+                    contentObserver.disconnect();
+                    console.log('弹窗关闭，清理观察器');
+                }
+            };
+
+            // 定期检查弹窗是否已关闭
+            const cleanupInterval = setInterval(cleanup, 1000);
+            setTimeout(() => {
+                clearInterval(cleanupInterval);
+                cleanup();
+            }, 60000); // 1分钟后停止检查
+        }, 100); // 增加延迟时间
+    }
+
+    // 新增方法：仅对特定元素应用规则
+    private applyRulesToElement(element: HTMLElement) {
+        this.rules.forEach(rule => {
+            // 在指定元素范围内查找匹配的元素
+            const elements = element.querySelectorAll(rule.selector);
+            elements.forEach(targetElement => {
+                const elementKey = this.getElementKey(targetElement);
+                if (targetElement.textContent === rule.originalText) {
+                    if (!this.originalTexts.has(elementKey)) {
+                        this.originalTexts.set(elementKey, targetElement.textContent);
+                        targetElement.textContent = rule.translatedText;
+                        console.log('应用翻译到弹窗元素:', {
+                            selector: rule.selector,
+                            from: rule.originalText,
+                            to: rule.translatedText
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    // 新增方法：从弹窗内容推断插件ID
+    private getPluginIdFromModal(modalElement: HTMLElement): string {
+        const modalTitle = modalElement.querySelector('.modal-title')?.textContent || '';
+        
+        // 从标题中提取插件名称
+        const pluginName = modalTitle.split(':')[0]?.trim();
+        if (!pluginName) return '';
+
+        // 查找匹配的插件
+        const plugins = (this.plugin.app as any).plugins.plugins;
+        for (const [id, plugin] of Object.entries(plugins)) {
+            if (plugin.manifest.name === pluginName) {
+                return id;
+            }
+        }
+
+
+        
+        return specialCases[pluginName] || '';
     }
 }
