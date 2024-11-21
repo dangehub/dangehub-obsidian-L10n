@@ -1,5 +1,5 @@
-import { App, Plugin } from 'obsidian';
-import { TranslationPlugin } from './main';
+import TranslationPlugin from './main';
+import { TranslationRule } from './types/TranslationRule';
 
 export class ControlWindow {
     private isRecording: boolean = false;
@@ -15,7 +15,7 @@ export class ControlWindow {
 
     constructor(private plugin: TranslationPlugin) {
         this.containerEl = document.createElement('div');
-        this.containerEl.addClass('translation-control-panel');
+        this.containerEl.classList.add('translation-control-panel');
         this.containerEl.style.cssText = `
             position: fixed;
             top: 20%;
@@ -37,26 +37,26 @@ export class ControlWindow {
     open() {
         if (this.isOpen) return;
         
-        this.containerEl.empty();
+        this.containerEl.innerHTML = '';
         this.containerEl.style.display = 'flex';
 
         // 添加拖动条
-        const dragHandle = this.containerEl.createDiv('drag-handle');
-        dragHandle.setText('翻译控制面板');
-        dragHandle.style.flexShrink = '0';
-        
+        const dragHandle = this.containerEl.appendChild(document.createElement('div'));
+        dragHandle.classList.add('drag-handle');
+        dragHandle.innerText = '翻译控制面板';
+
         // 添加关闭按钮
-        const closeButton = dragHandle.createEl('button', {
-            cls: 'close-button',
-            text: '×'
-        });
+        const closeButton = dragHandle.appendChild(document.createElement('button'));
+        closeButton.classList.add('close-button');
+        closeButton.innerText = '×';
         closeButton.onclick = () => this.close();
 
         // 设置拖动事件
         this.setupDrag(dragHandle);
 
         // 创建一个内容容器
-        const contentContainer = this.containerEl.createDiv('content-container');
+        const contentContainer = this.containerEl.appendChild(document.createElement('div'));
+        contentContainer.classList.add('content-container');
         contentContainer.style.cssText = `
             flex: 1;
             display: flex;
@@ -65,246 +65,80 @@ export class ControlWindow {
             padding: 10px;
         `;
 
-        // 按钮容器和按钮
-        const buttonContainer = contentContainer.createDiv('button-container');
-        buttonContainer.style.flexShrink = '0';
-        this.createButtons(buttonContainer);
-        
         // 添加搜索栏
         this.createSearchBar(contentContainer);
 
-        // 规则列表容器
-        const rulesContainer = contentContainer.createDiv('rules-container');
-        rulesContainer.style.cssText = `
-            flex: 1;
-            overflow-y: auto;
-            margin-top: 10px;
-            padding-right: 10px;
-        `;
-        
-        this.updateRulesList();
+        // 添加按钮容器
+        this.createButtonContainer(contentContainer);
+
+        // 添加规则列表
+        this.createRulesList(contentContainer);
 
         this.isOpen = true;
     }
 
     close() {
+        if (!this.isOpen) return;
         this.containerEl.style.display = 'none';
         this.isOpen = false;
     }
 
     private setupDrag(dragHandle: HTMLElement) {
-        dragHandle.addEventListener('mousedown', (e: MouseEvent) => {
-            if (e.target === dragHandle) {
-                this.isDragging = true;
-                this.dragStartX = e.clientX;
-                this.dragStartY = e.clientY;
-                this.initialLeft = this.containerEl.offsetLeft;
-                this.initialTop = this.containerEl.offsetTop;
-                dragHandle.addClass('dragging');
-                e.preventDefault();
-            }
-        });
-
-        document.addEventListener('mousemove', (e: MouseEvent) => {
-            if (!this.isDragging) return;
-
-            const deltaX = e.clientX - this.dragStartX;
-            const deltaY = e.clientY - this.dragStartY;
-            
-            const newLeft = this.initialLeft + deltaX;
-            const newTop = this.initialTop + deltaY;
-
-            // 确保不会拖出视口
-            const maxLeft = window.innerWidth - this.containerEl.offsetWidth;
-            const maxTop = window.innerHeight - this.containerEl.offsetHeight;
-
-            this.containerEl.style.left = `${Math.min(Math.max(0, newLeft), maxLeft)}px`;
-            this.containerEl.style.top = `${Math.min(Math.max(0, newTop), maxTop)}px`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (this.isDragging) {
-                this.isDragging = false;
-                dragHandle.removeClass('dragging');
-            }
-        });
-    }
-
-    private createButtons(buttonContainer: HTMLElement) {
-        // 记录按钮
-        const recordBtn = buttonContainer.createEl('button');
-        recordBtn.setText('开始记录');
-        recordBtn.onclick = () => {
-            if (!this.isRecording) {
-                this.plugin.startRecording();
-                recordBtn.setText('停止记录');
-                recordBtn.addClass('recording');
-            } else {
-                this.plugin.stopRecording();
-                recordBtn.setText('开始记录');
-                recordBtn.removeClass('recording');
-            }
-            this.isRecording = !this.isRecording;
-        };
-
-        // 翻译开关
-        const toggleBtn = buttonContainer.createEl('button');
-        toggleBtn.setText(this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译');
-        toggleBtn.onclick = () => {
-            this.plugin.toggleTranslation();
-            toggleBtn.setText(this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译');
-        };
-
-        // 删除按钮
-        const deleteBtn = buttonContainer.createEl('button');
-        deleteBtn.setText('删除选中');
-        deleteBtn.addClass('mod-warning');
-        deleteBtn.onclick = () => {
-            const selectedRules = Array.from(this.containerEl.querySelectorAll('.rule-checkbox:checked'))
-                .map(cb => (cb as HTMLInputElement).getAttribute('data-key'))
-                .filter((key): key is string => key !== null);
-            if (selectedRules.length > 0) {
-                this.plugin.deleteRules(selectedRules);
-                this.updateRulesList(this.searchInput?.value || '', this.pluginSelect?.value || '');
-            }
-        };
-
-        // 添加扫描按钮
-        const scanBtn = buttonContainer.createEl('button');
-        scanBtn.setText('扫描文本');
-        scanBtn.onclick = async () => {
-            const results = await this.plugin.translationService.scanForTranslatableText();
-            
-            // 创建结果展示窗口
-            const resultContainer = this.containerEl.createDiv('scan-results');
-            resultContainer.empty();
-            
-            const header = resultContainer.createDiv('scan-header');
-            header.setText(`找到 ${results.length} 个待翻译文本`);
-            
-            const list = resultContainer.createDiv('scan-list');
-            results.forEach(({text, selector}) => {
-                const item = list.createDiv('scan-item');
-                
-                const textEl = item.createDiv('scan-text');
-                textEl.setText(text);
-                
-                const addBtn = item.createEl('button');
-                addBtn.setText('添加到规则');
-                addBtn.onclick = () => {
-                    const pluginId = this.plugin.getCurrentPluginId();
-                    const rule: TranslationRule = {
-                        selector,
-                        originalText: text,
-                        translatedText: text, // 初始译文与原文相同
-                        pluginId,
-                        timestamp: Date.now()
-                    };
-                    this.plugin.translationService.addRule(rule);
-                    this.updateRulesList();
-                    addBtn.disabled = true;
-                    addBtn.setText('已添加');
-                };
-            });
+        dragHandle.onmousedown = (e: MouseEvent) => {
+            this.isDragging = true;
+            this.dragStartX = e.clientX;
+            this.dragStartY = e.clientY;
+            const rect = this.containerEl.getBoundingClientRect();
+            this.initialLeft = rect.left;
+            this.initialTop = rect.top;
+            document.onmousemove = this.onDrag.bind(this);
+            document.onmouseup = this.stopDrag.bind(this);
         };
     }
 
-    public updateRulesList(searchText: string = '', selectedPluginId: string = '') {
-        const rulesContainer = this.containerEl.querySelector('.rules-container');
-        if (!rulesContainer) return;
+    private onDrag(e: MouseEvent) {
+        if (!this.isDragging) return;
+        const dx = e.clientX - this.dragStartX;
+        const dy = e.clientY - this.dragStartY;
+        this.containerEl.style.left = `${this.initialLeft + dx}px`;
+        this.containerEl.style.top = `${this.initialTop + dy}px`;
+    }
 
-        // 保存当前的搜索条件
-        searchText = searchText || this.searchInput?.value || '';
-        selectedPluginId = selectedPluginId || this.pluginSelect?.value || '';
-
-        rulesContainer.empty();
-        let rules = this.plugin.getAllRules();
-        
-        // 更新插件选择框
-        this.updatePluginSelect();
-        
-        // 按插件ID过滤
-        if (selectedPluginId) {
-            rules = rules.filter(rule => rule.pluginId === selectedPluginId);
-        }
-        
-        // 按搜索文本过滤
-        if (searchText) {
-            const searchLower = searchText.toLowerCase();
-            rules = rules.filter(rule => 
-                rule.pluginId.toLowerCase().includes(searchLower) ||
-                rule.originalText.toLowerCase().includes(searchLower) ||
-                rule.translatedText.toLowerCase().includes(searchLower)
-            );
-        }
-
-        rules.forEach(rule => {
-            const ruleEl = rulesContainer.createDiv('rule-item');
-            
-            const checkbox = ruleEl.createEl('input', {
-                type: 'checkbox',
-                cls: 'rule-checkbox'
-            });
-            checkbox.setAttribute('data-key', `${rule.pluginId}:${rule.selector}:${rule.originalText}`);
-
-            const ruleInfo = ruleEl.createDiv('rule-info');
-            ruleInfo.createDiv('rule-plugin').setText(`插件: ${rule.pluginId}`);
-            ruleInfo.createDiv('rule-original').setText(`原文: ${rule.originalText}`);
-            
-            const translatedContainer = ruleInfo.createDiv('rule-translated');
-            translatedContainer.setText('译文: ');
-            
-            // 创建可编辑的译文输入框
-            const translatedInput = translatedContainer.createEl('input', {
-                type: 'text',
-                value: rule.translatedText
-            });
-            translatedInput.addClass('translated-input');
-            
-            // 添加修改事件
-            translatedInput.addEventListener('change', () => {
-                const newRule = {
-                    ...rule,
-                    translatedText: translatedInput.value
-                };
-                this.plugin.updateRule(newRule);
-            });
-        });
+    private stopDrag() {
+        this.isDragging = false;
+        document.onmousemove = null;
+        document.onmouseup = null;
     }
 
     private createSearchBar(container: HTMLElement) {
-        const searchContainer = container.createDiv('search-container');
+        const searchContainer = container.appendChild(document.createElement('div'));
+        searchContainer.classList.add('search-container');
         
         // 创建搜索框
-        const searchInput = searchContainer.createEl('input', {
-            type: 'text',
-            placeholder: '搜索规则...'
-        });
-        searchInput.addClass('search-input');
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = '搜索规则...';
+        searchInput.classList.add('search-input');
+        searchContainer.appendChild(searchInput);
         
         // 创建插件选择下拉框
-        const pluginSelect = searchContainer.createEl('select');
-        pluginSelect.addClass('plugin-select');
-        
-        // 阻止事件冒泡
-        pluginSelect.addEventListener('mousedown', (e: MouseEvent) => {
-            e.stopPropagation();
-        });
-        pluginSelect.addEventListener('click', (e: MouseEvent) => {
-            e.stopPropagation();
-        });
+        const pluginSelect = document.createElement('select');
+        pluginSelect.classList.add('plugin-select');
+        searchContainer.appendChild(pluginSelect);
         
         // 添加"全部插件"选项
-        const allOption = pluginSelect.createEl('option');
+        const allOption = document.createElement('option');
         allOption.value = '';
         allOption.text = '全部插件';
+        pluginSelect.appendChild(allOption);
         
         // 获取所有唯一的插件ID
         const pluginIds = new Set(this.plugin.getAllRules().map(rule => rule.pluginId));
         pluginIds.forEach(pluginId => {
-            const option = pluginSelect.createEl('option');
+            const option = document.createElement('option');
             option.value = pluginId;
             option.text = pluginId;
+            pluginSelect.appendChild(option);
         });
         
         // 保存搜索框和选择框的引用
@@ -321,6 +155,88 @@ export class ControlWindow {
         });
     }
 
+    private createButtonContainer(container: HTMLElement) {
+        const buttonContainer = container.appendChild(document.createElement('div'));
+        buttonContainer.classList.add('button-container');
+        
+        // 添加记录按钮
+        const recordButton = document.createElement('button');
+        recordButton.textContent = '开始记录';
+        recordButton.onclick = () => {
+            if (!this.isRecording) {
+                this.isRecording = true;
+                recordButton.textContent = '停止记录';
+                recordButton.classList.add('recording');
+                this.plugin.startRecording();
+            } else {
+                this.isRecording = false;
+                recordButton.textContent = '开始记录';
+                recordButton.classList.remove('recording');
+                this.plugin.stopRecording();
+            }
+        };
+        buttonContainer.appendChild(recordButton);
+        
+        // 添加翻译开关按钮
+        const toggleButton = document.createElement('button');
+        toggleButton.textContent = this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译';
+        toggleButton.onclick = () => {
+            this.plugin.toggleTranslation();
+            toggleButton.textContent = this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译';
+        };
+        buttonContainer.appendChild(toggleButton);
+    }
+
+    private createRulesList(container: HTMLElement) {
+        const list = container.appendChild(document.createElement('div'));
+        list.classList.add('rules-list');
+        list.style.overflowY = 'auto';
+        list.style.flex = '1';
+
+        this.updateRulesList();
+    }
+
+    updateRulesList(searchTerm: string = '', selectedPluginId: string = '') {
+        const list = this.containerEl.querySelector('.rules-list') as HTMLElement;
+        if (!list) return;
+
+        list.innerHTML = '';
+
+        let rules = this.plugin.getAllRules();
+
+        if (selectedPluginId) {
+            rules = rules.filter((rule: TranslationRule) => rule.pluginId === selectedPluginId);
+        }
+
+        if (searchTerm) {
+            const lowerSearch = searchTerm.toLowerCase();
+            rules = rules.filter((rule: TranslationRule) => 
+                rule.originalText.toLowerCase().includes(lowerSearch) || 
+                rule.translatedText.toLowerCase().includes(lowerSearch)
+            );
+        }
+
+        rules.forEach((rule: TranslationRule) => {
+            const ruleEl = document.createElement('div');
+            ruleEl.classList.add('rule-item');
+            ruleEl.style.padding = '5px';
+            ruleEl.style.borderBottom = '1px solid var(--background-modifier-border)';
+
+            ruleEl.innerHTML = `
+                <span><strong>原文:</strong> ${rule.originalText}</span><br>
+                <span><strong>译文:</strong> ${rule.translatedText}</span>
+                <button class="delete-button" style="float: right;">删除</button>
+            `;
+
+            const deleteButton = ruleEl.querySelector('.delete-button') as HTMLButtonElement;
+            deleteButton.onclick = () => {
+                this.plugin.deleteRules([this.plugin.generateRuleKey(rule.pluginId, rule.selector, rule.originalText)]);
+            };
+
+            list.appendChild(ruleEl);
+        });
+    }
+
     private updatePluginSelect() {
         const pluginSelect = this.containerEl.querySelector('.plugin-select') as HTMLSelectElement;
         if (!pluginSelect) return;
@@ -329,19 +245,21 @@ export class ControlWindow {
         const currentValue = pluginSelect.value;
         
         // 清空现有选项
-        pluginSelect.empty();
+        pluginSelect.innerHTML = '';
         
         // 添加"全部插件"选项
-        const allOption = pluginSelect.createEl('option');
+        const allOption = document.createElement('option');
         allOption.value = '';
         allOption.text = '全部插件';
+        pluginSelect.appendChild(allOption);
         
         // 获取所有唯一的插件ID
         const pluginIds = new Set(this.plugin.getAllRules().map(rule => rule.pluginId));
         pluginIds.forEach(pluginId => {
-            const option = pluginSelect.createEl('option');
+            const option = document.createElement('option');
             option.value = pluginId;
             option.text = pluginId;
+            pluginSelect.appendChild(option);
         });
         
         // 恢复之前的选择
@@ -350,8 +268,8 @@ export class ControlWindow {
 
     destroy() {
         // 移除事件监听器
-        const searchInput = this.containerEl.querySelector('.search-input');
-        const pluginSelect = this.containerEl.querySelector('.plugin-select');
+        const searchInput = this.containerEl.querySelector('.search-input') as HTMLInputElement;
+        const pluginSelect = this.containerEl.querySelector('.plugin-select') as HTMLSelectElement;
         
         if (searchInput) {
             searchInput.removeEventListener('input', () => this.updateRulesList());

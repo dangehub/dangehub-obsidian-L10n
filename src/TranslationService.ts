@@ -2,6 +2,11 @@ import { Plugin } from 'obsidian';
 import { TranslationRule } from './types/TranslationRule';
 import { FloatingBall } from './FloatingBall';
 
+const specialCases: { [key: string]: string } = {
+    // 示例:
+    // "SomePluginName": "some-plugin-id",
+};
+
 export class TranslationService {
     private rules: Map<string, TranslationRule> = new Map();
     private isEnabled: boolean = false;
@@ -249,8 +254,7 @@ export class TranslationService {
         return selector;
     }
 
-    // 生成规则的唯一键
-    private generateRuleKey(pluginId: string, selector: string, originalText: string): string {
+    public generateRuleKey(pluginId: string, selector: string, originalText: string): string {
         return `${pluginId}::${selector}::${originalText}`;
     }
 
@@ -641,13 +645,12 @@ export class TranslationService {
         // 查找匹配的插件
         const plugins = (this.plugin.app as any).plugins.plugins;
         for (const [id, plugin] of Object.entries(plugins)) {
-            if (plugin.manifest.name === pluginName) {
+            const typedPlugin = plugin as Plugin;
+            if (typedPlugin.manifest.name === pluginName) {
                 return id;
             }
         }
 
-
-        
         return specialCases[pluginName] || '';
     }
 
@@ -661,7 +664,7 @@ export class TranslationService {
         
         // 重新应用所有规则
         this.rules.forEach(rule => {
-            // 使用更宽松的匹配策略
+            // 使用更宽松的���配策略
             document.querySelectorAll('*').forEach(element => {
                 if (element.textContent?.trim() === rule.originalText) {
                     const elementKey = this.getElementKey(element);

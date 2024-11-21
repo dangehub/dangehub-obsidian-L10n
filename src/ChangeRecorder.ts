@@ -1,5 +1,6 @@
-import { Plugin } from 'obsidian';
+import { Plugin, Notice } from 'obsidian';
 import { TextChange, TranslationRule } from './types/TranslationRule';
+import TranslationPlugin from './main';
 
 export class ChangeRecorder {
     private isRecording: boolean = false;
@@ -7,7 +8,7 @@ export class ChangeRecorder {
     private lastChange: TextChange | null = null;
     private changes: TextChange[] = [];
 
-    constructor(private plugin: Plugin) {
+    constructor(private plugin: TranslationPlugin) {
         this.observer = new MutationObserver((mutations) => {
             if (!this.isRecording) return;
 
@@ -42,6 +43,7 @@ export class ChangeRecorder {
 
         // 保存最新的更改
         this.lastChange = change;
+        this.changes.push(change);
 
         // 自动生成并应用规则
         if (this.lastChange) {
@@ -66,6 +68,10 @@ export class ChangeRecorder {
             pluginId,
             timestamp: change.timestamp
         };
+    }
+
+    generateRules(pluginId: string): TranslationRule[] {
+        return this.changes.map(change => this.generateRule(change, pluginId));
     }
 
     startRecording() {

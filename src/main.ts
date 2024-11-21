@@ -1,17 +1,22 @@
-import { Plugin, Notice } from 'obsidian';
+import { Plugin, Notice, App, PluginManifest } from 'obsidian';
 import { TranslationService } from './TranslationService';
 import { ChangeRecorder } from './ChangeRecorder';
 import { ControlWindow } from './ControlWindow';
+import { TranslationRule } from './types/TranslationRule';
 
 export default class TranslationPlugin extends Plugin {
     public controlWindow: ControlWindow | null = null;
-    private translationService: TranslationService;
+    public translationService: TranslationService;
     private changeRecorder: ChangeRecorder;
+
+    constructor(app: App, manifest: PluginManifest) {
+        super(app, manifest);
+        this.translationService = new TranslationService(this);
+    }
 
     async onload() {
         console.log('加载翻译插件');
         
-        this.translationService = new TranslationService(this);
         this.changeRecorder = new ChangeRecorder(this);
 
         // 加载已保存的规则
@@ -84,7 +89,7 @@ export default class TranslationPlugin extends Plugin {
 
     }
 
-    private getCurrentPluginId(): string {
+    public getCurrentPluginId(): string {
         const activeTab = document.querySelector('.vertical-tab-nav-item.is-active');
         if (!activeTab) {
             console.log('未找到活动标签');
@@ -113,11 +118,11 @@ export default class TranslationPlugin extends Plugin {
         // 输出所有插件信息用于调试
         console.log('所有已安装插件:', Object.entries(plugins).map(([id, plugin]) => ({
             id,
-            name: plugin.manifest.name
+            name: (plugin as any).manifest.name
         })));
 
         // 尝试通过名称匹配找到插件ID
-        for (const [id, plugin] of Object.entries(plugins)) {
+        for (const [id, plugin] of Object.entries(plugins) as [string, any][]) {
             if (plugin.manifest.name === pluginName) {
                 console.log('通过名称匹配找到插件ID:', id);
                 return id;
@@ -190,5 +195,10 @@ export default class TranslationPlugin extends Plugin {
         this.translationService.saveRules();
         // 更新控制面板
         this.controlWindow?.updateRulesList();
+    }
+
+    // 添加公共方法
+    public generateRuleKey(pluginId: string, selector: string, originalText: string): string {
+        return this.translationService.generateRuleKey(pluginId, selector, originalText);
     }
 }
