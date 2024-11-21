@@ -119,10 +119,39 @@ export class TranslationService {
         return this.isEnabled;
     }
 
-    // 添加翻译规则
+    private findExistingRuleBySelector(selector: string): TranslationRule | undefined {
+        return Array.from(this.rules.values()).find(rule => rule.selector === selector);
+    }
+
     addRule(rule: TranslationRule) {
-        const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
-        this.rules.set(key, rule);
+        // 检查是否已存在相同选择器的规则
+        const existingRule = this.findExistingRuleBySelector(rule.selector);
+        if (existingRule) {
+            // 如果新规则的原文与现有规则的译文相同，说明这是一个链式翻译
+            if (rule.originalText === existingRule.translatedText) {
+                // 创建一个新规则，保留原始规则的原文和新规则的译文
+                const mergedRule = {
+                    ...rule,
+                    originalText: existingRule.originalText
+                };
+                const key = this.generateRuleKey(mergedRule.pluginId, mergedRule.selector, mergedRule.originalText);
+                this.rules.set(key, mergedRule);
+                console.log('合并链式翻译规则:', {
+                    original: existingRule,
+                    new: rule,
+                    merged: mergedRule
+                });
+            } else {
+                // 如果不是链式翻译，则按原方式添加
+                const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
+                this.rules.set(key, rule);
+            }
+        } else {
+            // 如果不存在相同选择器的规则，直接添加
+            const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
+            this.rules.set(key, rule);
+        }
+
         if (this.isEnabled) {
             this.applyRule(rule);
         }
@@ -236,7 +265,7 @@ export class TranslationService {
                     JSON.stringify(rules, null, 2)
                 );
             } catch (error) {
-                console.error(`保存插件 ${pluginId} 的规则时出错:`, error);
+                console.error(`��存插件 ${pluginId} 的规则时出错:`, error);
             }
         }
 
@@ -317,12 +346,20 @@ export class TranslationService {
     }
 
     updateRule(rule: TranslationRule) {
-        const key = `${rule.pluginId}:${rule.selector}:${rule.originalText}`;
+        // 检查是否存在链式翻译
+        const existingRule = this.findExistingRuleBySelector(rule.selector);
+        if (existingRule && existingRule.originalText !== rule.originalText) {
+            // 如果存在不同原文的规则，删除旧规则
+            const oldKey = this.generateRuleKey(existingRule.pluginId, existingRule.selector, existingRule.originalText);
+            this.rules.delete(oldKey);
+        }
+
+        const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
         this.rules.set(key, rule);
         
-        // 如果翻译功能已启用，立即应用更新后的规则
         if (this.isEnabled) {
-            this.applyRule(rule);
+            this.restoreOriginalTexts();
+            this.applyAllRules();
         }
     }
 }
