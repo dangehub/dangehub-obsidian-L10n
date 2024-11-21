@@ -246,26 +246,56 @@ export class TranslationService {
             rulesByPlugin.get(rule.pluginId)?.push(rule);
         });
 
-        // 分别保存每个插件的规则
+        // 获取现有的规则目录
+        const baseDir = '.obsidian/plugins/aqu-L10n/translation';
+        if (await this.plugin.app.vault.adapter.exists(baseDir)) {
+            const pluginDirs = await this.plugin.app.vault.adapter.list(baseDir);
+            
+            // 处理需要删除的插件目录
+            for (const pluginDir of pluginDirs.folders) {
+                const pluginId = pluginDir.split('/').pop() || '';
+                // 如果插件没有任何规则了，删除其目录
+                if (!rulesByPlugin.has(pluginId)) {
+                    try {
+                        // 递归删除目录
+                        await this.plugin.app.vault.adapter.rmdir(pluginDir, true);
+                        console.log(`删除空规则目录: ${pluginDir}`);
+                    } catch (error) {
+                        console.error(`删除目录 ${pluginDir} 失败:`, error);
+                    }
+                }
+            }
+        }
+
+        // 保存有规则的插件文件
         for (const [pluginId, rules] of rulesByPlugin) {
             try {
-                // 获取目标插件的版本号
                 const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
-                if (!targetPlugin) {
-                    console.error(`找不到插件: ${pluginId}`);
-                    continue;
-                }
-                
-                const version = targetPlugin.manifest.version;
+                const version = targetPlugin?.manifest?.version || 'latest';
                 const dir = await this.ensureTranslationDir(pluginId);
                 const filePath = `${dir}/${version}.json`;
                 
-                await this.plugin.app.vault.adapter.write(
-                    filePath,
-                    JSON.stringify(rules, null, 2)
-                );
+                if (rules.length === 0) {
+                    // 如果规则为空，删除文件
+                    if (await this.plugin.app.vault.adapter.exists(filePath)) {
+                        await this.plugin.app.vault.adapter.remove(filePath);
+                        console.log(`删除空规则文件: ${filePath}`);
+                    }
+                    // 检查并删除空目录
+                    if ((await this.plugin.app.vault.adapter.list(dir)).files.length === 0) {
+                        await this.plugin.app.vault.adapter.rmdir(dir, true);
+                        console.log(`删除空语言目录: ${dir}`);
+                    }
+                } else {
+                    // 有规则则保存
+                    await this.plugin.app.vault.adapter.write(
+                        filePath,
+                        JSON.stringify(rules, null, 2)
+                    );
+                    console.log(`保存规则到文件: ${filePath}, 规则数: ${rules.length}`);
+                }
             } catch (error) {
-                console.error(`��存插件 ${pluginId} 的规则时出错:`, error);
+                console.error(`处理插件 ${pluginId} 的规则时出错:`, error);
             }
         }
 
