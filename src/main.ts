@@ -17,6 +17,15 @@ export default class TranslationPlugin extends Plugin {
         // 加载已保存的规则
         await this.translationService.loadRules();
 
+    // 如果翻译状态为开启，则自动重启一次
+    if (this.translationService.isTranslationEnabled) {
+        console.log('检测到翻译状态为开启，自动重启翻译');
+        this.translationService.disable();
+        setTimeout(() => {
+            this.translationService.enable();
+            }, 100);
+        }
+
         // 添加记录命令
         this.addCommand({
             id: 'start-translation-recording',
@@ -72,6 +81,7 @@ export default class TranslationPlugin extends Plugin {
                 this.controlWindow.open();
             }
         });
+
     }
 
     private getCurrentPluginId(): string {

@@ -1,5 +1,6 @@
 import { Plugin } from 'obsidian';
 import { TranslationRule } from './types/TranslationRule';
+import { FloatingBall } from './FloatingBall';
 
 export class TranslationService {
     private rules: Map<string, TranslationRule> = new Map();
@@ -9,6 +10,7 @@ export class TranslationService {
     private clickHandler: (e: MouseEvent) => void;
     private modalObserver: MutationObserver;
     private commandObserver: MutationObserver;
+    private floatingBall: FloatingBall;
 
     constructor(private plugin: Plugin) {
         // 创建观察器来监听页面变化
@@ -36,6 +38,8 @@ export class TranslationService {
                 }, 100);
             }
         };
+
+        this.floatingBall = new FloatingBall(this);
     }
 
     // 清除原始文本记录
@@ -50,6 +54,7 @@ export class TranslationService {
             this.startObserving();
             this.setupModalHandling();
             this.applyAllRules();
+            this.floatingBall.show();
             console.log('翻译已启用');
         }
     }
@@ -63,6 +68,7 @@ export class TranslationService {
                 this.commandObserver.disconnect();
             }
             this.restoreOriginalTexts();
+            this.floatingBall.hide();
             console.log('翻译已停用');
         }
     }
@@ -122,6 +128,7 @@ export class TranslationService {
     // 清理资源
     destroy() {
         this.disable();
+        this.floatingBall.destroy();
         this.observer.disconnect();
         if (this.modalObserver) {
             this.modalObserver.disconnect();
@@ -642,5 +649,33 @@ export class TranslationService {
 
         
         return specialCases[pluginName] || '';
+    }
+
+    // 一键应用所有规则
+    forceApplyAllRules() {
+        if (!this.isEnabled) return;
+        
+        // 清除所有已应用的翻译和记录
+        this.restoreOriginalTexts();
+        this.clearOriginalTexts();
+        
+        // 重新应用所有规则
+        this.rules.forEach(rule => {
+            // 使用更宽松的匹配策略
+            document.querySelectorAll('*').forEach(element => {
+                if (element.textContent?.trim() === rule.originalText) {
+                    const elementKey = this.getElementKey(element);
+                    this.originalTexts.set(elementKey, element.textContent);
+                    element.textContent = rule.translatedText;
+                }
+            });
+        });
+
+        // 处理所有打开的弹窗
+        document.querySelectorAll('.modal-container, .prompt, .suggestion-container, .menu-dropdown').forEach(modal => {
+            if (modal instanceof HTMLElement) {
+                this.applyRulesToElement(modal);
+            }
+        });
     }
 }
