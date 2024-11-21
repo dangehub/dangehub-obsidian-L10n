@@ -10,6 +10,8 @@ export class ControlWindow {
     private initialTop: number = 0;
     private containerEl: HTMLElement;
     private isOpen: boolean = false;
+    private searchInput: HTMLInputElement | null = null;
+    private pluginSelect: HTMLSelectElement | null = null;
 
     constructor(private plugin: TranslationPlugin) {
         // 创建容器元素
@@ -117,7 +119,7 @@ export class ControlWindow {
                 this.plugin.stopRecording();
                 recordBtn.setText('开始记录');
                 recordBtn.removeClass('recording');
-                this.updateRulesList();
+                this.updateRulesList(this.searchInput?.value || '', this.pluginSelect?.value || '');
             }
             this.isRecording = !this.isRecording;
         };
@@ -140,7 +142,7 @@ export class ControlWindow {
                 .filter((key): key is string => key !== null);
             if (selectedRules.length > 0) {
                 this.plugin.deleteRules(selectedRules);
-                this.updateRulesList();
+                this.updateRulesList(this.searchInput?.value || '', this.pluginSelect?.value || '');
             }
         };
     }
@@ -220,6 +222,10 @@ export class ControlWindow {
             option.value = pluginId;
             option.text = pluginId;
         });
+        
+        // 保存搜索框和选择框的引用
+        this.searchInput = searchInput;
+        this.pluginSelect = pluginSelect;
         
         // 添加搜索事件监听
         searchInput.addEventListener('input', () => {
