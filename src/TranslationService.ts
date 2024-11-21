@@ -272,10 +272,17 @@ export class TranslationService {
                     if (await this.plugin.app.vault.adapter.exists(rulesPath)) {
                         const rulesJson = await this.plugin.app.vault.adapter.read(rulesPath);
                         const rules = JSON.parse(rulesJson);
-                        rules.forEach((rule: TranslationRule) => this.addRule(rule));
+                        if (Array.isArray(rules)) {
+                            rules.forEach((rule: TranslationRule) => {
+                                // 确保规则包含所有必要字段
+                                if (rule.pluginId && rule.selector && rule.originalText && rule.translatedText) {
+                                    this.addRule(rule);
+                                }
+                            });
+                        }
                     }
                 } catch (error) {
-                    console.error(`加载插件规则时出错:`, error);
+                    console.error(`加载插件 ${pluginDir} 的规则时出错:`, error);
                 }
             }
         }

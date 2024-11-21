@@ -60,3 +60,23 @@ If your plugin does not need CSS, delete this file.
     background-color: var(--color-red);
     color: white;
 }
+
+.translation-control-panel .search-container {
+    padding: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+.translation-control-panel .search-input {
+    flex: 1;
+    padding: 5px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+}
+
+.translation-control-panel .plugin-select {
+    width: 120px;
+    padding: 5px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+}
