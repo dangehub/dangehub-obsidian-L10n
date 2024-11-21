@@ -76,18 +76,46 @@ export default class TranslationPlugin extends Plugin {
 
     private getCurrentPluginId(): string {
         const activeTab = document.querySelector('.vertical-tab-nav-item.is-active');
-        if (!activeTab) return '';
-        
-        // 尝试从 data-tab-id 获取插件ID
-        const tabId = activeTab.getAttribute('data-tab-id');
-        if (tabId?.startsWith('plugin-')) {
-            return tabId.replace('plugin-', '');
+        if (!activeTab) {
+            console.log('未找到活动标签');
+            return '';
         }
         
-        // 如果没有 data-tab-id，尝试从文本内容获取
-        const pluginName = activeTab.textContent?.trim().toLowerCase() || '';
-        // 将插件名称转换为插件ID格式（如 Dataview -> dataview）
-        return pluginName;
+        // 输出调试信息
+        console.log('当前标签元素:', {
+            element: activeTab,
+            dataTabId: activeTab.getAttribute('data-tab-id'),
+            textContent: activeTab.textContent
+        });
+
+        // 从 data-tab-id 获取插件ID
+        const tabId = activeTab.getAttribute('data-tab-id');
+        if (tabId?.startsWith('plugin-')) {
+            const pluginId = tabId.replace('plugin-', '');
+            console.log('找到插件ID:', pluginId);
+            return pluginId;
+        }
+        
+        // 如果没有 data-tab-id，尝试从插件列表中匹配
+        const pluginName = activeTab.textContent?.trim() || '';
+        const plugins = (this.app as any).plugins.plugins;
+        
+        // 输出所有插件信息用于调试
+        console.log('所有已安装插件:', Object.entries(plugins).map(([id, plugin]) => ({
+            id,
+            name: plugin.manifest.name
+        })));
+
+        // 尝试通过名称匹配找到插件ID
+        for (const [id, plugin] of Object.entries(plugins)) {
+            if (plugin.manifest.name === pluginName) {
+                console.log('通过名称匹配找到插件ID:', id);
+                return id;
+            }
+        }
+
+        console.log('未能找到插件ID，使用的插件名称:', pluginName);
+        return '';
     }
 
     onunload() {
