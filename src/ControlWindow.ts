@@ -14,17 +14,22 @@ export class ControlWindow {
     private pluginSelect: HTMLSelectElement | null = null;
 
     constructor(private plugin: TranslationPlugin) {
-        // 创建容器元素
         this.containerEl = document.createElement('div');
         this.containerEl.addClass('translation-control-panel');
-        this.containerEl.style.position = 'fixed';
-        this.containerEl.style.top = '20%';
-        this.containerEl.style.right = '20px';
-        this.containerEl.style.width = '400px';
-        this.containerEl.style.height = 'auto';
-        this.containerEl.style.maxHeight = '70vh';
-        this.containerEl.style.zIndex = '1000';
-        this.containerEl.style.display = 'none';
+        this.containerEl.style.cssText = `
+            position: fixed;
+            top: 20%;
+            right: 20px;
+            width: 400px;
+            height: 70vh;
+            display: flex;
+            flex-direction: column;
+            background: var(--background-primary);
+            border: 1px solid var(--background-modifier-border);
+            border-radius: 4px;
+            z-index: 1000;
+            display: none;
+        `;
         
         document.body.appendChild(this.containerEl);
     }
@@ -33,11 +38,12 @@ export class ControlWindow {
         if (this.isOpen) return;
         
         this.containerEl.empty();
-        this.containerEl.style.display = 'block';
+        this.containerEl.style.display = 'flex';
 
         // 添加拖动条
         const dragHandle = this.containerEl.createDiv('drag-handle');
         dragHandle.setText('翻译控制面板');
+        dragHandle.style.flexShrink = '0';
         
         // 添加关闭按钮
         const closeButton = dragHandle.createEl('button', {
@@ -49,15 +55,33 @@ export class ControlWindow {
         // 设置拖动事件
         this.setupDrag(dragHandle);
 
+        // 创建一个内容容器
+        const contentContainer = this.containerEl.createDiv('content-container');
+        contentContainer.style.cssText = `
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 10px;
+        `;
+
         // 按钮容器和按钮
-        const buttonContainer = this.containerEl.createDiv('button-container');
+        const buttonContainer = contentContainer.createDiv('button-container');
+        buttonContainer.style.flexShrink = '0';
         this.createButtons(buttonContainer);
         
         // 添加搜索栏
-        this.createSearchBar(this.containerEl);
+        this.createSearchBar(contentContainer);
 
         // 规则列表容器
-        const rulesContainer = this.containerEl.createDiv('rules-container');
+        const rulesContainer = contentContainer.createDiv('rules-container');
+        rulesContainer.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 10px;
+            padding-right: 10px;
+        `;
+        
         this.updateRulesList();
 
         this.isOpen = true;
