@@ -4,9 +4,9 @@ import { ChangeRecorder } from './ChangeRecorder';
 import { ControlWindow } from './ControlWindow';
 
 export default class TranslationPlugin extends Plugin {
+    public controlWindow: ControlWindow | null = null;
     private translationService: TranslationService;
     private changeRecorder: ChangeRecorder;
-    private controlWindow: ControlWindow;
 
     async onload() {
         console.log('加载翻译插件');
@@ -140,10 +140,14 @@ export default class TranslationPlugin extends Plugin {
     deleteRules(ruleKeys: string[]) {
         this.translationService.deleteRules(ruleKeys);
         this.translationService.saveRules();
+        // 更新控制面板
+        this.controlWindow?.updateRulesList();
     }
 
     updateRule(rule: TranslationRule) {
         this.translationService.updateRule(rule);
         this.translationService.saveRules();
+        // 更新控制面板
+        this.controlWindow?.updateRulesList();
     }
 }

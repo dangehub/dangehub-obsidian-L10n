@@ -170,9 +170,13 @@ export class ControlWindow {
         };
     }
 
-    private updateRulesList(searchText: string = '', selectedPluginId: string = '') {
+    public updateRulesList(searchText: string = '', selectedPluginId: string = '') {
         const rulesContainer = this.containerEl.querySelector('.rules-container');
         if (!rulesContainer) return;
+
+        // 保存当前的搜索条件
+        searchText = searchText || this.searchInput?.value || '';
+        selectedPluginId = selectedPluginId || this.pluginSelect?.value || '';
 
         rulesContainer.empty();
         let rules = this.plugin.getAllRules();

@@ -49,6 +49,11 @@ export class ChangeRecorder {
             this.plugin.translationService.addRule(rule);
             this.plugin.translationService.saveRules();
             new Notice(`已生成翻译规则: ${oldText} -> ${newText}`);
+            
+            // 更新控制面板的规则列表
+            if (this.plugin.controlWindow) {
+                this.plugin.controlWindow.updateRulesList();
+            }
         }
     }
 
