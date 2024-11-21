@@ -315,4 +315,14 @@ export class TranslationService {
     getRuleCount(): number {
         return this.rules.size;
     }
+
+    updateRule(rule: TranslationRule) {
+        const key = `${rule.pluginId}:${rule.selector}:${rule.originalText}`;
+        this.rules.set(key, rule);
+        
+        // 如果翻译功能已启用，立即应用更新后的规则
+        if (this.isEnabled) {
+            this.applyRule(rule);
+        }
+    }
 }

@@ -141,4 +141,9 @@ export default class TranslationPlugin extends Plugin {
         this.translationService.deleteRules(ruleKeys);
         this.translationService.saveRules();
     }
+
+    updateRule(rule: TranslationRule) {
+        this.translationService.updateRule(rule);
+        this.translationService.saveRules();
+    }
 }

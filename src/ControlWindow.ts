@@ -184,7 +184,25 @@ export class ControlWindow {
             const ruleInfo = ruleEl.createDiv('rule-info');
             ruleInfo.createDiv('rule-plugin').setText(`插件: ${rule.pluginId}`);
             ruleInfo.createDiv('rule-original').setText(`原文: ${rule.originalText}`);
-            ruleInfo.createDiv('rule-translated').setText(`译文: ${rule.translatedText}`);
+            
+            const translatedContainer = ruleInfo.createDiv('rule-translated');
+            translatedContainer.setText('译文: ');
+            
+            // 创建可编辑的译文输入框
+            const translatedInput = translatedContainer.createEl('input', {
+                type: 'text',
+                value: rule.translatedText
+            });
+            translatedInput.addClass('translated-input');
+            
+            // 添加修改事件
+            translatedInput.addEventListener('change', () => {
+                const newRule = {
+                    ...rule,
+                    translatedText: translatedInput.value
+                };
+                this.plugin.updateRule(newRule);
+            });
         });
     }
 
