@@ -5,6 +5,7 @@ export class ChangeRecorder {
     private isRecording: boolean = false;
     private observer: MutationObserver;
     private lastChange: TextChange | null = null;
+    private changes: TextChange[] = [];
 
     constructor(private plugin: Plugin) {
         this.observer = new MutationObserver((mutations) => {
@@ -80,11 +81,19 @@ export class ChangeRecorder {
         });
     }
 
-    stopRecording() {
+    stopRecording(): TextChange[] {
         this.isRecording = false;
         this.observer.disconnect();
+        
+        // 确保返回一个数组，即使是空数组
+        const changes = this.changes || [];
+        
+        // 重置状态
+        this.changes = [];
         this.lastChange = null;
         console.log('停止记录');
+        
+        return changes;
     }
 
     private generateSelector(element: Element): string {

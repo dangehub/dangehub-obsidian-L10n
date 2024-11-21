@@ -134,8 +134,11 @@ export default class TranslationPlugin extends Plugin {
     }
 
     stopRecording() {
+        // 获取记录的更改
         const changes = this.changeRecorder.stopRecording();
-        if (changes.length > 0) {
+        
+        // 检查 changes 是否存在且有内容
+        if (changes && changes.length > 0) {
             const pluginId = this.getCurrentPluginId();
             const rules = this.changeRecorder.generateRules(pluginId);
             rules.forEach(rule => this.translationService.addRule(rule));
