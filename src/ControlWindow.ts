@@ -12,6 +12,11 @@ export class ControlWindow {
     private isOpen: boolean = false;
     private searchInput: HTMLInputElement | null = null;
     private pluginSelect: HTMLSelectElement | null = null;
+    private isResizing = false;
+    private initialX = 0;
+    private initialY = 0;
+    private initialWidth = 0;
+    private initialHeight = 0;
 
     constructor(private plugin: TranslationPlugin) {
         this.containerEl = document.createElement('div');
@@ -74,6 +79,9 @@ export class ControlWindow {
         // 添加规则列表
         this.createRulesList(contentContainer);
 
+        // 在创建其他元素后添加
+        this.setupResize();
+        
         this.isOpen = true;
     }
 
@@ -282,5 +290,45 @@ export class ControlWindow {
         if (this.containerEl && this.containerEl.parentNode) {
             this.containerEl.parentNode.removeChild(this.containerEl);
         }
+    }
+
+    private setupResize() {
+        const resizeHandle = this.containerEl.createDiv({ cls: 'resize-handle' });
+        
+        const startResize = (e: MouseEvent) => {
+            if (e.button !== 0) return; // 只响应左键
+            this.isResizing = true;
+            this.initialWidth = this.containerEl.offsetWidth;
+            this.initialHeight = this.containerEl.offsetHeight;
+            this.initialX = e.clientX;
+            this.initialY = e.clientY;
+            
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', stopResize);
+        };
+
+        const resize = (e: MouseEvent) => {
+            if (!this.isResizing) return;
+            
+            const newWidth = this.initialWidth + (e.clientX - this.initialX);
+            const newHeight = this.initialHeight + (e.clientY - this.initialY);
+            
+            // 限制最小和最大尺寸
+            const minWidth = 300;
+            const minHeight = 200;
+            const maxWidth = 800;
+            const maxHeight = 600;
+            
+            this.containerEl.style.width = `${Math.min(Math.max(newWidth, minWidth), maxWidth)}px`;
+            this.containerEl.style.height = `${Math.min(Math.max(newHeight, minHeight), maxHeight)}px`;
+        };
+
+        const stopResize = () => {
+            this.isResizing = false;
+            document.removeEventListener('mousemove', resize);
+            document.removeEventListener('mouseup', stopResize);
+        };
+
+        resizeHandle.addEventListener('mousedown', startResize);
     }
 }
