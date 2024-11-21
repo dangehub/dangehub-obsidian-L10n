@@ -119,7 +119,6 @@ export class ControlWindow {
                 this.plugin.stopRecording();
                 recordBtn.setText('开始记录');
                 recordBtn.removeClass('recording');
-                this.updateRulesList(this.searchInput?.value || '', this.pluginSelect?.value || '');
             }
             this.isRecording = !this.isRecording;
         };

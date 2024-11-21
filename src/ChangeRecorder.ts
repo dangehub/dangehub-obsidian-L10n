@@ -2,49 +2,71 @@ import { Plugin } from 'obsidian';
 import { TextChange, TranslationRule } from './types/TranslationRule';
 
 export class ChangeRecorder {
-    private changes: TextChange[] = [];
     private isRecording: boolean = false;
     private observer: MutationObserver;
+    private lastChange: TextChange | null = null;
 
     constructor(private plugin: Plugin) {
-        // 创建 MutationObserver
         this.observer = new MutationObserver((mutations) => {
             if (!this.isRecording) return;
 
             mutations.forEach(mutation => {
-                if (mutation.type === 'characterData') {
-                    // 文本节点变化
+                if (mutation.type === 'characterData' && mutation.target.textContent) {
                     const element = mutation.target.parentElement;
+                    if (!element) return;
+
+                    const oldText = mutation.oldValue || '';
                     const newText = mutation.target.textContent;
-                    const oldText = mutation.oldValue;
 
-                    if (element && oldText && newText && oldText !== newText) {
-                        this.recordChange(element, oldText, newText);
+                    if (oldText !== newText) {
+                        this.handleTextChange(element, oldText, newText);
                     }
-                } else if (mutation.type === 'childList') {
-                    // 子节点变化（可能是文本被完全替换）
-                    mutation.addedNodes.forEach(node => {
-                        if (node.nodeType === Node.TEXT_NODE) {
-                            const element = node.parentElement;
-                            const newText = node.textContent;
-                            const oldText = mutation.removedNodes[0]?.textContent;
-
-                            if (element && oldText && newText && oldText !== newText) {
-                                this.recordChange(element, oldText, newText);
-                            }
-                        }
-                    });
                 }
             });
         });
     }
 
+    private handleTextChange(element: Element, oldText: string, newText: string) {
+        // 检查元素是否属于控制面板
+        if (element.closest('.translation-control-panel')) {
+            return;
+        }
+
+        const change: TextChange = {
+            element,
+            originalText: oldText,
+            translatedText: newText,
+            timestamp: Date.now()
+        };
+
+        // 保存最新的更改
+        this.lastChange = change;
+
+        // 自动生成并应用规则
+        if (this.lastChange) {
+            const pluginId = this.plugin.getCurrentPluginId();
+            const rule = this.generateRule(this.lastChange, pluginId);
+            this.plugin.translationService.addRule(rule);
+            this.plugin.translationService.saveRules();
+            new Notice(`已生成翻译规则: ${oldText} -> ${newText}`);
+        }
+    }
+
+    private generateRule(change: TextChange, pluginId: string): TranslationRule {
+        return {
+            selector: this.generateSelector(change.element),
+            originalText: change.originalText,
+            translatedText: change.translatedText,
+            pluginId,
+            timestamp: change.timestamp
+        };
+    }
+
     startRecording() {
         this.isRecording = true;
-        this.changes = [];
+        this.lastChange = null;
         console.log('开始记录文本变更');
 
-        // 开始观察整个文档
         this.observer.observe(document.body, {
             childList: true,
             subtree: true,
@@ -53,36 +75,11 @@ export class ChangeRecorder {
         });
     }
 
-    stopRecording(): TextChange[] {
+    stopRecording() {
         this.isRecording = false;
         this.observer.disconnect();
-        console.log('停止记录,共捕获变更:', this.changes.length);
-        return this.changes;
-    }
-
-    recordChange(element: Element, oldText: string, newText: string) {
-        // 检查元素是否属于控制面板
-        if (element.closest('.translation-control-panel')) {
-            return; // 如果是控制面板中的元素，直接返回
-        }
-
-        console.log('记录变更:', { oldText, newText });
-        this.changes.push({
-            element,
-            originalText: oldText,
-            translatedText: newText,
-            timestamp: Date.now()
-        });
-    }
-
-    generateRules(pluginId: string): TranslationRule[] {
-        return this.changes.map(change => ({
-            selector: this.generateSelector(change.element),
-            originalText: change.originalText,
-            translatedText: change.translatedText,
-            pluginId,
-            timestamp: change.timestamp
-        }));
+        this.lastChange = null;
+        console.log('停止记录');
     }
 
     private generateSelector(element: Element): string {
@@ -119,7 +116,7 @@ export class ChangeRecorder {
     }
 
     clear() {
-        this.changes = [];
+        this.lastChange = null;
         this.observer.disconnect();
     }
 }
