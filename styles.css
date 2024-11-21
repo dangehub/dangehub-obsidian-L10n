@@ -80,3 +80,30 @@ If your plugin does not need CSS, delete this file.
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
 }
+
+.scan-results {
+    margin-top: 10px;
+    padding: 10px;
+    border-top: 1px solid var(--background-modifier-border);
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.scan-header {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.scan-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.scan-text {
+    flex: 1;
+    margin-right: 10px;
+    word-break: break-all;
+}

@@ -217,7 +217,7 @@ export class TranslationService {
 
     // 生成规则的唯一键
     private generateRuleKey(pluginId: string, selector: string, originalText: string): string {
-        return `${pluginId}:${selector}:${originalText}`;
+        return `${pluginId}::${selector}::${originalText}`;
     }
 
     private async ensureTranslationDir(pluginId: string): Promise<string> {
@@ -254,10 +254,9 @@ export class TranslationService {
             // 处理需要删除的插件目录
             for (const pluginDir of pluginDirs.folders) {
                 const pluginId = pluginDir.split('/').pop() || '';
-                // 如果插件没有任何规则了，删除其目录
-                if (!rulesByPlugin.has(pluginId)) {
+                // 只有当插件目录不是 zh-cn 且没有任何规则时才删除
+                if (pluginId !== 'zh-cn' && !rulesByPlugin.has(pluginId)) {
                     try {
-                        // 递归删除目录
                         await this.plugin.app.vault.adapter.rmdir(pluginDir, true);
                         console.log(`删除空规则目录: ${pluginDir}`);
                     } catch (error) {
@@ -272,8 +271,10 @@ export class TranslationService {
             try {
                 const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
                 const version = targetPlugin?.manifest?.version || 'latest';
+                
+                // 修正路径拼接，避免双斜杠
                 const dir = await this.ensureTranslationDir(pluginId);
-                const filePath = `${dir}/${version}.json`;
+                const filePath = `${dir}/${version}.json`.replace(/\/+/g, '/');
                 
                 if (rules.length === 0) {
                     // 如果规则为空，删除文件
@@ -281,10 +282,12 @@ export class TranslationService {
                         await this.plugin.app.vault.adapter.remove(filePath);
                         console.log(`删除空规则文件: ${filePath}`);
                     }
-                    // 检查并删除空目录
-                    if ((await this.plugin.app.vault.adapter.list(dir)).files.length === 0) {
-                        await this.plugin.app.vault.adapter.rmdir(dir, true);
-                        console.log(`删除空语言目录: ${dir}`);
+                    // 检查并删除空目录（但不删除 zh-cn 目录）
+                    const dirToCheck = dir.replace(/\/+/g, '/');
+                    if (dirToCheck.split('/').pop() !== 'zh-cn' && 
+                        (await this.plugin.app.vault.adapter.list(dirToCheck)).files.length === 0) {
+                        await this.plugin.app.vault.adapter.rmdir(dirToCheck, true);
+                        console.log(`删除空插件目录: ${dirToCheck}`);
                     }
                 } else {
                     // 有规则则保存
@@ -376,20 +379,96 @@ export class TranslationService {
     }
 
     updateRule(rule: TranslationRule) {
-        // 检查是否存在链式翻译
-        const existingRule = this.findExistingRuleBySelector(rule.selector);
-        if (existingRule && existingRule.originalText !== rule.originalText) {
-            // 如果存在不同原文的规则，删除旧规则
-            const oldKey = this.generateRuleKey(existingRule.pluginId, existingRule.selector, existingRule.originalText);
-            this.rules.delete(oldKey);
-        }
+        // 添加日志跟踪当前规则状态
+        console.log('更新前的规则总数:', this.rules.size);
+        console.log('准备更新的规则:', rule);
 
         const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
+        
+        // 检查规则是否存在
+        const existingRule = this.rules.get(key);
+        if (!existingRule) {
+            console.warn('未找到要更新的规则:', key);
+            return;
+        }
+
+        // 更新规则
         this.rules.set(key, rule);
         
+        // 验证更新后的状态
+        console.log('更新后的规则总数:', this.rules.size);
+        console.log('更新后的规则列表:', Array.from(this.rules.values()));
+
         if (this.isEnabled) {
             this.restoreOriginalTexts();
             this.applyAllRules();
         }
+
+        // 立即保存更改
+        this.saveRules();
+    }
+
+    // 添加新方法用于扫描文本
+    async scanForTranslatableText(): Promise<Array<{
+        element: Element,
+        text: string,
+        selector: string
+    }>> {
+        const results: Array<{
+            element: Element,
+            text: string,
+            selector: string
+        }> = [];
+        
+        const settingsContainer = document.querySelector('.vertical-tab-content-container');
+        if (!settingsContainer) {
+            console.log('未找到设置面板');
+            return results;
+        }
+
+        // 递归遍历元素
+        const traverse = (element: Element) => {
+            // 跳过翻译控制面板
+            if (element.closest('.translation-control-panel')) {
+                return;
+            }
+
+            // 检查元素是否只包含文本节点
+            if (element.childNodes.length === 1 && element.childNodes[0].nodeType === Node.TEXT_NODE) {
+                const text = element.textContent?.trim();
+                if (text && text.length > 1) { // 忽略单字符文本
+                    // 检查是否已经有这个文本的规则
+                    const selector = this.generateSelector(element);
+                    const isExisting = Array.from(this.rules.values()).some(rule => 
+                        rule.originalText === text || rule.translatedText === text
+                    );
+                    
+                    if (!isExisting) {
+                        results.push({
+                            element,
+                            text,
+                            selector
+                        });
+                    }
+                }
+            }
+
+            // 将 HTMLCollection 转换为数组后再遍历
+            Array.from(element.children).forEach(child => traverse(child));
+        };
+
+        traverse(settingsContainer);
+        console.log(`扫描完成，找到 ${results.length} 个待翻译文本`);
+        return results;
+    }
+
+    // 添加一个方法来验证规则集的完整性
+    private validateRules() {
+        const rulesArray = Array.from(this.rules.values());
+        console.log('当前规则验证:', {
+            totalRules: this.rules.size,
+            uniqueRules: new Set(rulesArray.map(r => this.generateRuleKey(r.pluginId, r.selector, r.originalText))).size,
+            rules: rulesArray
+        });
     }
 }

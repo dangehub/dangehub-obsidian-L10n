@@ -168,6 +168,45 @@ export class ControlWindow {
                 this.updateRulesList(this.searchInput?.value || '', this.pluginSelect?.value || '');
             }
         };
+
+        // 添加扫描按钮
+        const scanBtn = buttonContainer.createEl('button');
+        scanBtn.setText('扫描文本');
+        scanBtn.onclick = async () => {
+            const results = await this.plugin.translationService.scanForTranslatableText();
+            
+            // 创建结果展示窗口
+            const resultContainer = this.containerEl.createDiv('scan-results');
+            resultContainer.empty();
+            
+            const header = resultContainer.createDiv('scan-header');
+            header.setText(`找到 ${results.length} 个待翻译文本`);
+            
+            const list = resultContainer.createDiv('scan-list');
+            results.forEach(({text, selector}) => {
+                const item = list.createDiv('scan-item');
+                
+                const textEl = item.createDiv('scan-text');
+                textEl.setText(text);
+                
+                const addBtn = item.createEl('button');
+                addBtn.setText('添加到规则');
+                addBtn.onclick = () => {
+                    const pluginId = this.plugin.getCurrentPluginId();
+                    const rule: TranslationRule = {
+                        selector,
+                        originalText: text,
+                        translatedText: text, // 初始译文与原文相同
+                        pluginId,
+                        timestamp: Date.now()
+                    };
+                    this.plugin.translationService.addRule(rule);
+                    this.updateRulesList();
+                    addBtn.disabled = true;
+                    addBtn.setText('已添加');
+                };
+            });
+        };
     }
 
     public updateRulesList(searchText: string = '', selectedPluginId: string = '') {
