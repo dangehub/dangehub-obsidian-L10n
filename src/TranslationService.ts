@@ -192,19 +192,19 @@ export class TranslationService {
     }
 
     private async ensureTranslationDir(pluginId: string): Promise<string> {
-        // 使用 vault 根目录作为基准
-        const baseDir = '.obsidian/plugins/aqu-L10n/translation/zh-cn';
-        const pluginDir = `${baseDir}/${pluginId}`;
+        // 修改目录结构：.obsidian/plugins/aqu-L10n/translation/{pluginId}/zh-cn
+        const baseDir = `.obsidian/plugins/aqu-L10n/translation/${pluginId}`;
+        const langDir = `${baseDir}/zh-cn`;
         
         // 确保目录存在
         if (!await this.plugin.app.vault.adapter.exists(baseDir)) {
             await this.plugin.app.vault.adapter.mkdir(baseDir);
         }
-        if (!await this.plugin.app.vault.adapter.exists(pluginDir)) {
-            await this.plugin.app.vault.adapter.mkdir(pluginDir);
+        if (!await this.plugin.app.vault.adapter.exists(langDir)) {
+            await this.plugin.app.vault.adapter.mkdir(langDir);
         }
         
-        return pluginDir;
+        return langDir;
     }
 
     async saveRules() {
@@ -253,7 +253,7 @@ export class TranslationService {
             this.isEnabled = true;
         }
 
-        const baseDir = '.obsidian/plugins/aqu-L10n/translation/zh-cn';
+        const baseDir = '.obsidian/plugins/aqu-L10n/translation';
         if (await this.plugin.app.vault.adapter.exists(baseDir)) {
             // 获取所有插件目录
             const pluginDirs = await this.plugin.app.vault.adapter.list(baseDir);
@@ -266,7 +266,8 @@ export class TranslationService {
                     if (!targetPlugin) continue;
 
                     const version = targetPlugin.manifest.version;
-                    const rulesPath = `${pluginDir}/${version}.json`;
+                    const langDir = `${pluginDir}/zh-cn`;
+                    const rulesPath = `${langDir}/${version}.json`;
                     
                     if (await this.plugin.app.vault.adapter.exists(rulesPath)) {
                         const rulesJson = await this.plugin.app.vault.adapter.read(rulesPath);
@@ -279,6 +280,7 @@ export class TranslationService {
             }
         }
 
+        // 如果之前是启用状态，则应用规则
         if (this.isEnabled) {
             this.enable();
         }
