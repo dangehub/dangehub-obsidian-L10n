@@ -1,5 +1,12 @@
 # L10n Plugin for Obsidian 
 
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/dangehub/obsidian-L10n/total)
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![MIT License][license-shield]][license-url]
+
 A tool for translating plugin interfaces in Obsidian.
 
 ## Features
@@ -82,3 +89,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Basic translation functionality
 - Translation control panel
 - Real-time translation injection
+
+<!-- links -->
+[your-project-path]:dangehub/obsidian-L10n
+[contributors-shield]: https://img.shields.io/github/contributors/dangehub/obsidian-L10n.svg?style=flat-square
+[contributors-url]: https://github.com/dangehub/obsidian-L10n/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/dangehub/obsidian-L10n.svg?style=flat-square
+[forks-url]: https://github.com/dangehub/obsidian-L10n/network/members
+[stars-shield]: https://img.shields.io/github/stars/dangehub/obsidian-L10n.svg?style=flat-square
+[stars-url]: https://github.com/dangehub/obsidian-L10n/stargazers
+[issues-shield]: https://img.shields.io/github/issues/dangehub/obsidian-L10n.svg?style=flat-square
+[issues-url]: https://img.shields.io/github/issues/dangehub/obsidian-L10n.svg
+[license-shield]: https://img.shields.io/github/license/dangehub/obsidian-L10n.svg?style=flat-square
+[license-url]: https://github.com/dangehub/obsidian-L10n/blob/master/LICENSE.txt
