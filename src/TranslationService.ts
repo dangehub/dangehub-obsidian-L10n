@@ -113,7 +113,7 @@ export class TranslationService {
         const elements = document.querySelectorAll(rule.selector);
         elements.forEach(element => {
             const elementKey = this.getElementKey(element);
-            
+
             // 检查元素内容是否匹配原文
             if (element.textContent === rule.originalText) {
                 // 保存原始文本（如果还没保存）
@@ -226,18 +226,18 @@ export class TranslationService {
     private generateSelector(element: Element): string {
         let selector = '';
         let current = element;
-        
+
         while (current && current !== document.body) {
             let currentSelector = current.tagName.toLowerCase();
-            
+
             const significantClasses = Array.from(current.classList)
-                .filter(cls => 
-                    cls.includes('setting') || 
-                    cls.includes('nav') || 
+                .filter(cls =>
+                    cls.includes('setting') ||
+                    cls.includes('nav') ||
                     cls.includes('title') ||
                     cls.includes('content')
                 );
-            
+
             if (significantClasses.length > 0) {
                 currentSelector += '.' + significantClasses.join('.');
             }
@@ -262,7 +262,7 @@ export class TranslationService {
         // 修改目录结构：.obsidian/plugins/aqu-L10n/translation/{pluginId}/zh-cn
         const baseDir = `.obsidian/plugins/aqu-L10n/translation/${pluginId}`;
         const langDir = `${baseDir}/zh-cn`;
-        
+
         // 确保目录存在
         if (!await this.plugin.app.vault.adapter.exists(baseDir)) {
             await this.plugin.app.vault.adapter.mkdir(baseDir);
@@ -270,126 +270,144 @@ export class TranslationService {
         if (!await this.plugin.app.vault.adapter.exists(langDir)) {
             await this.plugin.app.vault.adapter.mkdir(langDir);
         }
-        
+
         return langDir;
     }
 
     async saveRules() {
-        // 按插件ID分组规则
-        const rulesByPlugin = new Map<string, TranslationRule[]>();
-        this.rules.forEach(rule => {
-            if (!rulesByPlugin.has(rule.pluginId)) {
-                rulesByPlugin.set(rule.pluginId, []);
-            }
-            rulesByPlugin.get(rule.pluginId)?.push(rule);
-        });
+        try {
+            // 按插件ID分组规则
+            const rulesByPlugin = new Map<string, TranslationRule[]>();
+            this.rules.forEach(rule => {
+                if (!rulesByPlugin.has(rule.pluginId)) {
+                    rulesByPlugin.set(rule.pluginId, []);
+                }
+                rulesByPlugin.get(rule.pluginId)?.push(rule);
+            });
 
-        // 获取现有的规则目录
-        const baseDir = '.obsidian/plugins/aqu-L10n/translation';
-        if (await this.plugin.app.vault.adapter.exists(baseDir)) {
-            const pluginDirs = await this.plugin.app.vault.adapter.list(baseDir);
-            
-            // 处理需要删除的插件目录
-            for (const pluginDir of pluginDirs.folders) {
-                const pluginId = pluginDir.split('/').pop() || '';
-                // 只有当插件目录不是 zh-cn 且没有任何规则时才删除
-                if (pluginId !== 'zh-cn' && !rulesByPlugin.has(pluginId)) {
+            // 保存有规则的插件文件
+            for (const [pluginId, rules] of rulesByPlugin) {
+                if (rules.length > 0) {
                     try {
-                        await this.plugin.app.vault.adapter.rmdir(pluginDir, true);
-                        console.log(`删除空规则目录: ${pluginDir}`);
+                        // 获取插件版本号
+                        const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
+                        const version = targetPlugin?.manifest?.version || 'unknown';
+                        
+                        // 确保目录存在
+                        const dir = await this.ensureTranslationDir(pluginId);
+                        const filePath = `${dir}/${version}.json`.replace(/\/+/g, '/');
+                        
+                        // 移除规则中的pluginId后保存
+                        const rulesToSave = rules.map(({pluginId: _, ...rule}) => rule);
+                        
+                        // 保存规则
+                        await this.plugin.app.vault.adapter.write(
+                            filePath,
+                            JSON.stringify(rulesToSave, null, 2)
+                        );
+                        console.log(`保存规则到文件: ${filePath}, 规则数: ${rules.length}`);
                     } catch (error) {
-                        console.error(`删除目录 ${pluginDir} 失败:`, error);
+                        console.error(`保存插件 ${pluginId} 的规则失败:`, error);
                     }
                 }
             }
-        }
 
-        // 保存有规则的插件文件
-        for (const [pluginId, rules] of rulesByPlugin) {
-            try {
-                const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
-                const version = targetPlugin?.manifest?.version || 'latest';
-                
-                // 修正路径拼接，避免双斜杠
-                const dir = await this.ensureTranslationDir(pluginId);
-                const filePath = `${dir}/${version}.json`.replace(/\/+/g, '/');
-                
-                if (rules.length === 0) {
-                    // 如果规则为空，删除文件
-                    if (await this.plugin.app.vault.adapter.exists(filePath)) {
-                        await this.plugin.app.vault.adapter.remove(filePath);
-                        console.log(`删除空规则文件: ${filePath}`);
-                    }
-                    // 检查并删除空目录（但不删除 zh-cn 目录）
-                    const dirToCheck = dir.replace(/\/+/g, '/');
-                    if (dirToCheck.split('/').pop() !== 'zh-cn' && 
-                        (await this.plugin.app.vault.adapter.list(dirToCheck)).files.length === 0) {
-                        await this.plugin.app.vault.adapter.rmdir(dirToCheck, true);
-                        console.log(`删除空插件目录: ${dirToCheck}`);
-                    }
-                } else {
-                    // 有规则则保存
-                    await this.plugin.app.vault.adapter.write(
-                        filePath,
-                        JSON.stringify(rules, null, 2)
-                    );
-                    console.log(`保存规则到文件: ${filePath}, 规则数: ${rules.length}`);
-                }
-            } catch (error) {
-                console.error(`处理插件 ${pluginId} 的规则时出错:`, error);
-            }
+            // 保存启用状态
+            await this.plugin.saveData({
+                isEnabled: this.isEnabled
+            });
+            
+            console.log('规则保存完成');
+        } catch (error) {
+            console.error('保存规则失败:', error);
         }
-
-        // 保存启用状态
-        await this.plugin.saveData({
-            isEnabled: this.isEnabled
-        });
     }
 
     async loadRules() {
-        // 加载启用状态
-        const data = await this.plugin.loadData();
-        if (data?.isEnabled) {
-            this.isEnabled = true;
-        }
+        try {
+            // 加载启用状态
+            const data = await this.plugin.loadData();
+            if (data?.isEnabled) {
+                this.isEnabled = true;
+            }
 
-        const baseDir = '.obsidian/plugins/aqu-L10n/translation';
-        if (await this.plugin.app.vault.adapter.exists(baseDir)) {
-            // 获取所有插件目录
-            const pluginDirs = await this.plugin.app.vault.adapter.list(baseDir);
-            
-            // 遍历所有插件目录加载规则
-            for (const pluginDir of pluginDirs.folders) {
-                try {
-                    const pluginId = pluginDir.split('/').pop() || '';
-                    const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
-                    if (!targetPlugin) continue;
-
-                    const version = targetPlugin.manifest.version;
-                    const langDir = `${pluginDir}/zh-cn`;
-                    const rulesPath = `${langDir}/${version}.json`;
-                    
-                    if (await this.plugin.app.vault.adapter.exists(rulesPath)) {
-                        const rulesJson = await this.plugin.app.vault.adapter.read(rulesPath);
-                        const rules = JSON.parse(rulesJson);
-                        if (Array.isArray(rules)) {
-                            rules.forEach((rule: TranslationRule) => {
-                                // 确保规则包含所有必要字段
-                                if (rule.pluginId && rule.selector && rule.originalText && rule.translatedText) {
-                                    this.addRule(rule);
+            const baseDir = '.obsidian/plugins/aqu-L10n/translation';
+            if (await this.plugin.app.vault.adapter.exists(baseDir)) {
+                // 获取所有插件目录
+                const pluginDirs = await this.plugin.app.vault.adapter.list(baseDir);
+                
+                // 遍历所有插件目录加载规则
+                for (const pluginDir of pluginDirs.folders) {
+                    try {
+                        const pluginId = pluginDir.split('/').pop() || '';
+                        const targetPlugin = (this.plugin.app as any).plugins.plugins[pluginId];
+                        const langDir = `${pluginDir}/zh-cn`;
+                        
+                        if (await this.plugin.app.vault.adapter.exists(langDir)) {
+                            const files = await this.plugin.app.vault.adapter.list(langDir);
+                            
+                            // 查找匹配的规则文件
+                            let ruleFile: string | undefined;
+                            
+                            // 如果插件存在，优先使用当前版本的规则文件
+                            if (targetPlugin) {
+                                const version = targetPlugin.manifest.version;
+                                ruleFile = files.files.find(f => f.endsWith(`${version}.json`));
+                            }
+                            
+                            // 如果没找到匹配版本的规则文件，使用最新的规则文件
+                            if (!ruleFile && files.files.length > 0) {
+                                ruleFile = files.files[files.files.length - 1];
+                            }
+                            
+                            if (ruleFile) {
+                                const rulesJson = await this.plugin.app.vault.adapter.read(ruleFile);
+                                const loadedRules = JSON.parse(rulesJson);
+                                if (Array.isArray(loadedRules)) {
+                                    // 添加pluginId到每个规则
+                                    loadedRules.forEach((rule: TranslationRule) => {
+                                        if (rule.selector && rule.originalText && rule.translatedText) {
+                                            this.addRule({
+                                                ...rule,
+                                                pluginId
+                                            });
+                                        }
+                                    });
                                 }
-                            });
+                            }
                         }
+                    } catch (error) {
+                        console.error(`加载插件 ${pluginDir} 的规则时出错:`, error);
                     }
-                } catch (error) {
-                    console.error(`加载插件 ${pluginDir} 的规则时出错:`, error);
                 }
             }
-        }
 
-        // 如果之前启用状态，则应用规则
-        if (this.isEnabled) {
-            this.enable();
+            // 如果之前启用状态，则应用规则
+            if (this.isEnabled) {
+                this.enable();
+            }
+        } catch (error) {
+            console.error('加载规则失败:', error);
+        }
+    }
+
+    // 辅助方法：加载单个规则文件
+    private async loadRuleFile(filePath: string) {
+        try {
+            const rulesJson = await this.plugin.app.vault.adapter.read(filePath);
+            const rules = JSON.parse(rulesJson);
+            if (Array.isArray(rules)) {
+                rules.forEach((rule: TranslationRule) => {
+                    // 确保规则包含所有必要字段
+                    if (rule.pluginId && rule.selector && 
+                        rule.originalText && rule.translatedText) {
+                        this.addRule(rule);
+                        console.log('成功加载规则:', rule);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error(`加载规则文件 ${filePath} 失败:`, error);
         }
     }
 
@@ -403,7 +421,7 @@ export class TranslationService {
         ruleKeys.forEach(key => {
             this.rules.delete(key);
         });
-        
+
         // 如果翻译已启用，重新应用剩余规则
         if (this.isEnabled) {
             this.restoreOriginalTexts();
@@ -422,7 +440,7 @@ export class TranslationService {
         console.log('准备更新的规则:', rule);
 
         const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
-        
+
         // 检查规则是否存在
         const existingRule = this.rules.get(key);
         if (!existingRule) {
@@ -432,7 +450,7 @@ export class TranslationService {
 
         // 更新规则
         this.rules.set(key, rule);
-        
+
         // 验证更新后的状态
         console.log('更新后的规则总数:', this.rules.size);
         console.log('更新后的规则列表:', Array.from(this.rules.values()));
@@ -457,7 +475,7 @@ export class TranslationService {
             text: string,
             selector: string
         }> = [];
-        
+
         const settingsContainer = document.querySelector('.vertical-tab-content-container');
         if (!settingsContainer) {
             console.log('未找到设置面板');
@@ -477,10 +495,10 @@ export class TranslationService {
                 if (text && text.length > 1) { // 忽略单字符文本
                     // 检查是否已经有这个文本的规则
                     const selector = this.generateSelector(element);
-                    const isExisting = Array.from(this.rules.values()).some(rule => 
+                    const isExisting = Array.from(this.rules.values()).some(rule =>
                         rule.originalText === text || rule.translatedText === text
                     );
-                    
+
                     if (!isExisting) {
                         results.push({
                             element,
@@ -581,7 +599,7 @@ export class TranslationService {
             }
 
             this.applyRulesToElement(modalElement);
-            
+
             // 创建内容观察器
             const contentObserver = new MutationObserver((mutations) => {
                 if (this.isEnabled) {
@@ -637,7 +655,7 @@ export class TranslationService {
     // 新增方法：从弹窗内容推断插件ID
     private getPluginIdFromModal(modalElement: HTMLElement): string {
         const modalTitle = modalElement.querySelector('.modal-title')?.textContent || '';
-        
+
         // 从标题中提取插件名称
         const pluginName = modalTitle.split(':')[0]?.trim();
         if (!pluginName) return '';
@@ -657,14 +675,14 @@ export class TranslationService {
     // 一键应用所有规则
     forceApplyAllRules() {
         if (!this.isEnabled) return;
-        
+
         // 清除所有已应用的翻译和记录
         this.restoreOriginalTexts();
         this.clearOriginalTexts();
-        
+
         // 重新应用所有规则
         this.rules.forEach(rule => {
-            // 使用更宽松的���配策略
+            // 使用更宽松的匹配策略
             document.querySelectorAll('*').forEach(element => {
                 if (element.textContent?.trim() === rule.originalText) {
                     const elementKey = this.getElementKey(element);
