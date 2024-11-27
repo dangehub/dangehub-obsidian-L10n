@@ -3,90 +3,109 @@ import { TranslationService } from './TranslationService';
 import { ChangeRecorder } from './ChangeRecorder';
 import { ControlWindow } from './ControlWindow';
 import { TranslationRule } from './types/TranslationRule';
+import { TranslationExtractor } from './TranslationExtractor';
 
 export default class TranslationPlugin extends Plugin {
     public controlWindow: ControlWindow | null = null;
     public translationService: TranslationService;
     private changeRecorder: ChangeRecorder;
+    private translationExtractor: TranslationExtractor;
+    public settings: TranslationPluginSettings;
 
     constructor(app: App, manifest: PluginManifest) {
         super(app, manifest);
-        this.translationService = new TranslationService(this);
+        this.translationExtractor = new TranslationExtractor(this);
     }
 
     async onload() {
         console.log('加载翻译插件');
         
+        // 加载设置
+        await this.loadSettings();
+        
+        // 初始化服务
+        this.translationService = new TranslationService(this);
         this.changeRecorder = new ChangeRecorder(this);
+        
+        // 初始化并加载所有规则
+        console.log('开始加载所有翻译规则...');
+        await this.translationService.loadAllRules();
+        console.log('翻译规则加载完成，规则数量:', this.translationService.getRuleCount());
 
-        // 加载已保存的规则
-        await this.translationService.loadRules();
-
-    // 如果翻译状态为开启，则自动重启一次
-    if (this.translationService.isTranslationEnabled) {
-        console.log('检测到翻译状态为开启，自动重启翻译');
-        this.translationService.disable();
-        setTimeout(() => {
-            this.translationService.enable();
-            }, 100);
+        // 如果上次是启用状态，自动应用翻译
+        if (this.settings.isEnabled) {
+            console.log('检测到翻译状态为启用，自动应用翻译');
+            this.translationService.setEnabled(true);
         }
 
-        // 添加记录命令
-        this.addCommand({
-            id: 'start-translation-recording',
-            name: '开始记录翻译修改',
-            callback: () => {
-                this.changeRecorder.startRecording();
-                new Notice('开始记录翻译修改\n请打开开发者工具进行文本修改');
-            }
-        });
+        // 初始化其他组件
+        this.controlWindow = new ControlWindow(this);
 
-        this.addCommand({
-            id: 'stop-translation-recording',
-            name: '停止记录并生成规则',
-            callback: () => {
-                const changes = this.changeRecorder.stopRecording();
-                if (changes.length > 0) {
-                    const pluginId = this.getCurrentPluginId();
-                    const rules = this.changeRecorder.generateRules(pluginId);
-                    rules.forEach(rule => this.translationService.addRule(rule));
-                    this.translationService.saveRules();
-                    new Notice(`已生成 ${rules.length} 条翻译规则`);
-                } else {
-                    new Notice('未检测到任何文本修改');
-                }
-            }
-        });
-
-        // 添加切换翻译命令
+        // 添加命令
         this.addCommand({
             id: 'toggle-translation',
             name: '切换翻译状态',
             callback: () => {
-                const isEnabled = this.translationService.isTranslationEnabled;
-                if (isEnabled) {
-                    this.translationService.disable();
-                    new Notice('翻译已停用');
-                } else {
-                    this.translationService.enable();
-                    new Notice('翻译已启用');
-                }
-                this.translationService.saveRules();
+                const newState = !this.translationService.isTranslationEnabled();
+                this.translationService.setEnabled(newState);
+                new Notice(`翻译已${newState ? '启用' : '禁用'}`);
             }
         });
 
-        // 添加控制面板命令
         this.addCommand({
-            id: 'open-translation-panel',
-            name: '打开翻译控制面板',
+            id: 'toggle-control-panel',
+            name: '切换控制面板',
             callback: () => {
-                if (!this.controlWindow) {
-                    this.controlWindow = new ControlWindow(this);
+                if (this.controlWindow) {
+                    this.controlWindow.toggle();
                 }
-                this.controlWindow.open();
             }
         });
 
+        this.addCommand({
+            id: 'start-recording',
+            name: '开始记录翻译',
+            callback: () => {
+                if (this.controlWindow) {
+                    this.controlWindow.startRecording();
+                }
+            }
+        });
+
+        this.addCommand({
+            id: 'stop-recording',
+            name: '停止记录翻译',
+            callback: () => {
+                if (this.controlWindow) {
+                    this.controlWindow.stopRecording();
+                }
+            }
+        });
+
+        // 添加状态栏
+        const statusBarItem = this.addStatusBarItem();
+        statusBarItem.createEl('span', { text: '翻译' });
+        statusBarItem.onclick = () => {
+            this.controlWindow.toggle();
+        };
+    }
+
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
+
+    async saveSettings() {
+        await this.saveData(this.settings);
+    }
+
+    onunload() {
+        // 保存当前状态
+        this.translationService.saveTranslationState();
+        if (this.controlWindow) {
+            this.controlWindow.close();
+            this.controlWindow.destroy();
+        }
+        console.log('卸载翻译插件');
     }
 
     public getCurrentPluginId(): string {
@@ -121,6 +140,7 @@ export default class TranslationPlugin extends Plugin {
             name: (plugin as any).manifest.name
         })));
 
+
         // 尝试通过名称匹配找到插件ID
         for (const [id, plugin] of Object.entries(plugins) as [string, any][]) {
             if (plugin.manifest.name === pluginName) {
@@ -133,53 +153,50 @@ export default class TranslationPlugin extends Plugin {
         return '';
     }
 
-    onunload() {
-        this.translationService.destroy();
-        console.log('卸载翻译插件');
-        if (this.controlWindow) {
-            this.controlWindow.close();
-            this.controlWindow.destroy();
+    // 获取当前激活的插件ID
+    private getActivePluginId(): string | null {
+        // 检查当前激活的设置标签
+        const activeTab = document.querySelector('.vertical-tab-header-group.is-active');
+        if (activeTab) {
+            const tabContent = activeTab.textContent?.trim();
+            if (tabContent) {
+                // 遍历所有已安装的插件
+                const plugins = (this.app as any).plugins.plugins;
+                for (const [id, plugin] of Object.entries(plugins)) {
+                    const manifest = (plugin as Plugin).manifest;
+                    if (manifest.name === tabContent) {
+                        return id;
+                    }
+                }
+            }
         }
+        return null;
     }
 
     // 提供给控制面板使用的方法
-    startRecording() {
-        this.changeRecorder.startRecording();
-        new Notice('开始记录翻译修改');
+    public isTranslationEnabled(): boolean {
+        return this.translationService.isTranslationEnabled();
     }
 
-    stopRecording() {
-        // 获取记录的更改
-        const changes = this.changeRecorder.stopRecording();
-        
-        // 检查 changes 是否存在且有内容
-        if (changes && changes.length > 0) {
-            const pluginId = this.getCurrentPluginId();
-            const rules = this.changeRecorder.generateRules(pluginId);
-            rules.forEach(rule => this.translationService.addRule(rule));
-            this.translationService.saveRules();
-            new Notice(`已生成 ${rules.length} 条翻译规则`);
-        } else {
-            new Notice('未检测到任何文本修改');
+    public toggleTranslation() {
+        const newState = !this.isTranslationEnabled();
+        this.translationService.setEnabled(newState);
+        new Notice(`翻译已${newState ? '启用' : '禁用'}`);
+    }
+
+    public startRecording() {
+        if (this.controlWindow) {
+            this.controlWindow.startRecording();
         }
     }
 
-    isTranslationEnabled(): boolean {
-        return this.translationService.isTranslationEnabled;
-    }
-
-    toggleTranslation() {
-        if (this.isTranslationEnabled()) {
-            this.translationService.disable();
-            new Notice('翻译已停用');
-        } else {
-            this.translationService.enable();
-            new Notice('翻译已启用');
+    public stopRecording() {
+        if (this.controlWindow) {
+            this.controlWindow.stopRecording();
         }
-        this.translationService.saveRules();
     }
 
-    getAllRules(): TranslationRule[] {
+    public getAllRules(): TranslationRule[] {
         return this.translationService.getAllRules();
     }
 
@@ -201,4 +218,12 @@ export default class TranslationPlugin extends Plugin {
     public generateRuleKey(pluginId: string, selector: string, originalText: string): string {
         return this.translationService.generateRuleKey(pluginId, selector, originalText);
     }
+}
+
+const DEFAULT_SETTINGS: TranslationPluginSettings = {
+    isEnabled: false,
+};
+
+interface TranslationPluginSettings {
+    isEnabled: boolean;
 }

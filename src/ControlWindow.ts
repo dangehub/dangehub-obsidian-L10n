@@ -17,6 +17,7 @@ export class ControlWindow {
     private initialY = 0;
     private initialWidth = 0;
     private initialHeight = 0;
+    private rulesContainer: HTMLElement;
 
     constructor(private plugin: TranslationPlugin) {
         this.containerEl = document.createElement('div');
@@ -37,6 +38,12 @@ export class ControlWindow {
         `;
         
         document.body.appendChild(this.containerEl);
+
+        // 监听规则更新事件
+        this.plugin.app.workspace.on('translation-rules-updated', () => {
+            console.log('Rules updated event received');
+            this.updateRulesList();
+        });
     }
 
     open() {
@@ -70,11 +77,11 @@ export class ControlWindow {
             padding: 10px;
         `;
 
+        // 添加控制按钮
+        this.createControlButtons(contentContainer);
+
         // 添加搜索栏
         this.createSearchBar(contentContainer);
-
-        // 添加按钮容器
-        this.createButtonContainer(contentContainer);
 
         // 添加规则列表
         this.createRulesList(contentContainer);
@@ -118,20 +125,119 @@ export class ControlWindow {
         document.onmouseup = null;
     }
 
+    private createControlButtons(container: HTMLElement) {
+        // 主要功能按钮区域
+        const mainButtonContainer = container.createDiv({ cls: 'translation-control-buttons' });
+        mainButtonContainer.style.cssText = `
+            margin-bottom: 10px;
+            padding: 5px;
+            border-bottom: 1px solid var(--background-modifier-border);
+        `;
+
+        // 启用/停用翻译按钮
+        const toggleButton = mainButtonContainer.createEl('button', {
+            text: this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译'
+        });
+        toggleButton.onclick = () => {
+            this.plugin.toggleTranslation();
+            toggleButton.textContent = this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译';
+        };
+
+        // 添加分隔符
+        mainButtonContainer.createEl('span', { text: ' | ' });
+
+        // 开始/停止记录按钮
+        const recordButton = mainButtonContainer.createEl('button', {
+            text: '开始记录'
+        });
+        recordButton.onclick = () => {
+            if (recordButton.textContent === '开始记录') {
+                this.plugin.startRecording();
+                recordButton.textContent = '停止记录';
+            } else {
+                this.plugin.stopRecording();
+                recordButton.textContent = '开始记录';
+                this.updateRulesList();
+            }
+        };
+
+        // 翻译提取器区域
+        const extractorContainer = container.createDiv({ cls: 'translation-extractor-buttons' });
+        extractorContainer.style.cssText = `
+            margin-bottom: 10px;
+            padding: 5px;
+            border-bottom: 1px solid var(--background-modifier-border);
+        `;
+
+        // 添加标题
+        extractorContainer.createEl('div', {
+            text: '批量规则转换',
+            cls: 'setting-item-heading'
+        });
+
+        // 添加翻译提取器按钮
+        const captureOriginalButton = extractorContainer.createEl('button', {
+            text: '捕获原文'
+        });
+        captureOriginalButton.onclick = () => this.onCaptureOriginalClick();
+
+        // 添加分隔符
+        extractorContainer.createEl('span', { text: ' | ' });
+
+        const captureTranslatedButton = extractorContainer.createEl('button', {
+            text: '捕获译文'
+        });
+        captureTranslatedButton.onclick = () => this.onCaptureTranslatedClick();
+    }
+
+    private async onCaptureOriginalClick() {
+        try {
+            await this.plugin.translationService.takeSnapshot();
+            new Notice('已捕获原文');
+        } catch (error) {
+            console.error('Error capturing original:', error);
+            new Notice('捕获原文失败');
+        }
+    }
+
+    private async onCaptureTranslatedClick() {
+        try {
+            await this.plugin.translationService.takeSnapshot();
+            new Notice('已捕获译文');
+        } catch (error) {
+            console.error('Error capturing translation:', error);
+            new Notice('捕获译文失败');
+        }
+    }
+
     private createSearchBar(container: HTMLElement) {
         const searchContainer = container.appendChild(document.createElement('div'));
         searchContainer.classList.add('search-container');
+        searchContainer.style.cssText = `
+            margin-bottom: 10px;
+            padding: 5px;
+            display: flex;
+            gap: 5px;
+        `;
         
         // 创建搜索框
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
         searchInput.placeholder = '搜索规则...';
         searchInput.classList.add('search-input');
+        searchInput.style.cssText = `
+            flex: 1;
+            padding: 4px;
+        `;
         searchContainer.appendChild(searchInput);
         
         // 创建插件选择下拉框
         const pluginSelect = document.createElement('select');
         pluginSelect.classList.add('plugin-select');
+        pluginSelect.style.cssText = `
+            min-width: 120px;
+            padding: 4px;
+        `;
         searchContainer.appendChild(pluginSelect);
         
         // 添加"全部插件"选项
@@ -140,13 +246,20 @@ export class ControlWindow {
         allOption.text = '全部插件';
         pluginSelect.appendChild(allOption);
         
+        // 获取所有规则
+        const rules = this.plugin.getAllRules();
+        
         // 获取所有唯一的插件ID
-        const pluginIds = new Set(this.plugin.getAllRules().map(rule => rule.pluginId));
-        pluginIds.forEach(pluginId => {
-            const option = document.createElement('option');
-            option.value = pluginId;
-            option.text = pluginId;
-            pluginSelect.appendChild(option);
+        const pluginIds = new Set(rules.map(rule => rule.pluginId).filter(id => id));
+        
+        // 按字母顺序排序插件ID
+        Array.from(pluginIds).sort().forEach(pluginId => {
+            if (pluginId) {
+                const option = document.createElement('option');
+                option.value = pluginId;
+                option.text = pluginId;
+                pluginSelect.appendChild(option);
+            }
         });
         
         // 保存搜索框和选择框的引用
@@ -163,156 +276,94 @@ export class ControlWindow {
         });
     }
 
-    private createButtonContainer(container: HTMLElement) {
-        const buttonContainer = container.appendChild(document.createElement('div'));
-        buttonContainer.classList.add('button-container');
-        
-        // 添加记录按钮
-        const recordButton = document.createElement('button');
-        recordButton.textContent = '开始记录';
-        recordButton.onclick = () => {
-            if (!this.isRecording) {
-                this.isRecording = true;
-                recordButton.textContent = '停止记录';
-                recordButton.classList.add('recording');
-                this.plugin.startRecording();
-            } else {
-                this.isRecording = false;
-                recordButton.textContent = '开始记录';
-                recordButton.classList.remove('recording');
-                this.plugin.stopRecording();
-            }
-        };
-        buttonContainer.appendChild(recordButton);
-        
-        // 添加翻译开关按钮
-        const toggleButton = document.createElement('button');
-        toggleButton.textContent = this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译';
-        toggleButton.onclick = () => {
-            this.plugin.toggleTranslation();
-            toggleButton.textContent = this.plugin.isTranslationEnabled() ? '停用翻译' : '启用翻译';
-        };
-        buttonContainer.appendChild(toggleButton);
-    }
-
     private createRulesList(container: HTMLElement) {
-        const list = container.appendChild(document.createElement('div'));
-        list.classList.add('rules-list');
-        list.style.overflowY = 'auto';
-        list.style.flex = '1';
-
+        this.rulesContainer = container.appendChild(document.createElement('div'));
+        this.rulesContainer.classList.add('rules-container');
+        this.rulesContainer.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid var(--background-modifier-border);
+            border-radius: 4px;
+            padding: 10px;
+        `;
+        
         this.updateRulesList();
     }
 
     updateRulesList(searchTerm: string = '', selectedPluginId: string = '') {
-        const list = this.containerEl.querySelector('.rules-list') as HTMLElement;
-        if (!list) return;
+        // 清空现有规则列表
+        this.rulesContainer.empty();
 
-        list.innerHTML = '';
-        let rules = this.plugin.getAllRules();
+        // 获取所有规则
+        const rules = this.plugin.getAllRules();
+        console.log('Updating rules list with', rules.length, 'rules');
+
+        // 过滤规则
+        let filteredRules = rules;
 
         if (selectedPluginId) {
-            rules = rules.filter((rule: TranslationRule) => rule.pluginId === selectedPluginId);
+            filteredRules = filteredRules.filter(rule => rule.pluginId === selectedPluginId);
         }
 
         if (searchTerm) {
             const lowerSearch = searchTerm.toLowerCase();
-            rules = rules.filter((rule: TranslationRule) => 
+            filteredRules = filteredRules.filter(rule => 
                 rule.originalText.toLowerCase().includes(lowerSearch) || 
                 rule.translatedText.toLowerCase().includes(lowerSearch)
             );
         }
 
-        rules.forEach((rule: TranslationRule) => {
-            const ruleEl = document.createElement('div');
-            ruleEl.classList.add('rule-item');
+        // 创建规则列表
+        const rulesList = this.rulesContainer.createEl('div', { cls: 'rules-list' });
+        rulesList.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        `;
+
+        // 显示规则数量
+        const countEl = rulesList.createEl('div', { 
+            cls: 'rules-count',
+            text: `共 ${filteredRules.length} 条规则`
+        });
+        countEl.style.cssText = `
+            font-weight: bold;
+            margin-bottom: 8px;
+            padding: 4px;
+            background: var(--background-secondary);
+            border-radius: 4px;
+        `;
+
+        // 显示规则
+        filteredRules.forEach((rule, index) => {
+            const ruleItem = rulesList.createEl('div', { cls: 'rule-item' });
+            ruleItem.style.cssText = `
+                padding: 8px;
+                background: var(--background-primary-alt);
+                border-radius: 4px;
+                border: 1px solid var(--background-modifier-border);
+            `;
             
-            // 创建原文显示
-            const originalText = document.createElement('div');
-            originalText.innerHTML = `<strong>原文:</strong> ${rule.originalText}`;
-            
-            // 创建译文输入框
-            const translationContainer = document.createElement('div');
-            const translationInput = document.createElement('input');
-            translationInput.type = 'text';
-            translationInput.value = rule.translatedText;
-            translationInput.style.width = '100%';
-            translationInput.style.marginTop = '4px';
-            translationInput.placeholder = '输入译文...';
-            
-            // 添加输入事件
-            translationInput.addEventListener('change', () => {
-                const updatedRule = {
-                    ...rule,
-                    translatedText: translationInput.value
-                };
-                this.plugin.updateRule(updatedRule);
+            const ruleText = ruleItem.createEl('div', { 
+                cls: 'rule-text',
+                text: `${index + 1}. ${rule.originalText} → ${rule.translatedText}`
             });
-            
-            translationContainer.innerHTML = '<strong>译文:</strong> ';
-            translationContainer.appendChild(translationInput);
-            
-            // 创建删除按钮
-            const deleteButton = document.createElement('button');
-            deleteButton.textContent = '删除';
-            deleteButton.style.float = 'right';
-            deleteButton.onclick = () => {
-                this.plugin.deleteRules([this.plugin.generateRuleKey(rule.pluginId, rule.selector, rule.originalText)]);
-            };
-            
-            // 组装规则项
-            ruleEl.appendChild(originalText);
-            ruleEl.appendChild(translationContainer);
-            ruleEl.appendChild(deleteButton);
-            list.appendChild(ruleEl);
+            ruleText.style.cssText = `
+                margin-bottom: 4px;
+                word-break: break-all;
+            `;
+
+            if (rule.pluginId) {
+                const pluginIdEl = ruleItem.createEl('div', {
+                    cls: 'rule-plugin-id',
+                    text: `插件: ${rule.pluginId}`
+                });
+                pluginIdEl.style.cssText = `
+                    font-size: 0.9em;
+                    color: var(--text-muted);
+                `;
+            }
         });
-    }
-
-    private updatePluginSelect() {
-        const pluginSelect = this.containerEl.querySelector('.plugin-select') as HTMLSelectElement;
-        if (!pluginSelect) return;
-
-        // 保存当前选中的值
-        const currentValue = pluginSelect.value;
-        
-        // 清空现有选项
-        pluginSelect.innerHTML = '';
-        
-        // 添加"全部插件"选项
-        const allOption = document.createElement('option');
-        allOption.value = '';
-        allOption.text = '全部插件';
-        pluginSelect.appendChild(allOption);
-        
-        // 获取所有唯一的插件ID
-        const pluginIds = new Set(this.plugin.getAllRules().map(rule => rule.pluginId));
-        pluginIds.forEach(pluginId => {
-            const option = document.createElement('option');
-            option.value = pluginId;
-            option.text = pluginId;
-            pluginSelect.appendChild(option);
-        });
-        
-        // 恢复之前的选择
-        pluginSelect.value = currentValue;
-    }
-
-    destroy() {
-        // 移除事件监听器
-        const searchInput = this.containerEl.querySelector('.search-input') as HTMLInputElement;
-        const pluginSelect = this.containerEl.querySelector('.plugin-select') as HTMLSelectElement;
-        
-        if (searchInput) {
-            searchInput.removeEventListener('input', () => this.updateRulesList());
-        }
-        if (pluginSelect) {
-            pluginSelect.removeEventListener('change', () => this.updateRulesList());
-        }
-
-        // 从 DOM 中移除控制面板
-        if (this.containerEl && this.containerEl.parentNode) {
-            this.containerEl.parentNode.removeChild(this.containerEl);
-        }
     }
 
     private setupResize() {
@@ -353,5 +404,36 @@ export class ControlWindow {
         };
 
         resizeHandle.addEventListener('mousedown', startResize);
+    }
+
+    toggle() {
+        if (this.isOpen) {
+            this.close();
+        } else {
+            this.open();
+        }
+    }
+
+    startRecording() {
+        if (!this.isRecording) {
+            this.isRecording = true;
+            this.plugin.changeRecorder.startRecording();
+            new Notice('开始记录翻译');
+        }
+    }
+
+    stopRecording() {
+        if (this.isRecording) {
+            this.isRecording = false;
+            this.plugin.changeRecorder.stopRecording();
+            new Notice('停止记录翻译');
+            this.updateRulesList();
+        }
+    }
+
+    destroy() {
+        if (this.containerEl && this.containerEl.parentNode) {
+            this.containerEl.parentNode.removeChild(this.containerEl);
+        }
     }
 }

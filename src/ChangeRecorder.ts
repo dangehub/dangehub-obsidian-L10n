@@ -47,10 +47,17 @@ export class ChangeRecorder {
 
         // 自动生成并应用规则
         if (this.lastChange) {
-            const pluginId = this.plugin.getCurrentPluginId();
+            const pluginId = this.plugin.translationService.getCurrentPluginId();
+            console.log('ChangeRecorder: Current plugin ID:', pluginId);
+            
             const rule = this.generateRule(this.lastChange, pluginId);
+            console.log('Generated rule:', rule);
+            
             this.plugin.translationService.addRule(rule);
-            this.plugin.translationService.saveRules();
+            
+            // 修改这里：传入规则数组
+            this.plugin.translationService.changeRecorderSaveRules([rule]);
+            
             new Notice(`已生成翻译规则: ${oldText} -> ${newText}`);
             
             // 更新控制面板的规则列表
