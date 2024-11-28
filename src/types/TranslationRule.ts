@@ -3,7 +3,14 @@ export interface TranslationRule {
     originalText: string;       // 原文
     translatedText: string;     // 译文
     pluginId: string;          // 所属插件ID
-    timestamp: number;         // 记录时间戳,用于排序和追踪
+    timestamp?: number;         // 记录时间戳,用于排序和追踪
+}
+
+export interface TextNode {
+    text: string;
+    path: number[];  // 记录在DOM树中的路径
+    depth: number;   // DOM树深度
+    index: number;   // 同级元素中的位置
 }
 
 // 用于临时存储调试过程中的修改

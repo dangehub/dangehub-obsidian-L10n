@@ -1,20 +1,29 @@
 import { Plugin, Notice, App, PluginManifest } from 'obsidian';
-import { TranslationService } from './TranslationService';
-import { ChangeRecorder } from './ChangeRecorder';
-import { ControlWindow } from './ControlWindow';
+import { TranslationService } from './services/translation';
+import { ChangeRecorder } from './services/recorder';
+import { ControlWindow } from './components/ControlWindow';
+import { FloatingBall } from './components/FloatingBall';
 import { TranslationRule } from './types/TranslationRule';
-import { TranslationExtractor } from './TranslationExtractor';
+
+interface TranslationPluginSettings {
+    isEnabled: boolean;
+    showFloatingBall: boolean;
+}
+
+const DEFAULT_SETTINGS: TranslationPluginSettings = {
+    isEnabled: false,
+    showFloatingBall: true,
+};
 
 export default class TranslationPlugin extends Plugin {
     public controlWindow: ControlWindow | null = null;
     public translationService: TranslationService;
-    private changeRecorder: ChangeRecorder;
-    private translationExtractor: TranslationExtractor;
+    public changeRecorder: ChangeRecorder;
+    private floatingBall: FloatingBall;
     public settings: TranslationPluginSettings;
 
     constructor(app: App, manifest: PluginManifest) {
         super(app, manifest);
-        this.translationExtractor = new TranslationExtractor(this);
     }
 
     async onload() {
@@ -29,29 +38,45 @@ export default class TranslationPlugin extends Plugin {
         
         // 初始化并加载所有规则
         console.log('开始加载所有翻译规则...');
-        await this.translationService.loadAllRules();
-        console.log('翻译规则加载完成，规则数量:', this.translationService.getRuleCount());
+        await this.translationService.init();
+        console.log('翻译规则加载完成');
 
         // 如果上次是启用状态，自动应用翻译
         if (this.settings.isEnabled) {
             console.log('检测到翻译状态为启用，自动应用翻译');
-            this.translationService.setEnabled(true);
+            this.translationService.enable();
         }
 
-        // 初始化其他组件
+        // 初始化组件
         this.controlWindow = new ControlWindow(this);
+        if (this.settings.showFloatingBall) {
+            this.floatingBall = new FloatingBall(this);
+        }
 
         // 添加命令
+        this.addCommands();
+
+        // 添加状态栏
+        this.addStatusBar();
+    }
+
+    private addCommands() {
+        // 切换翻译状态
         this.addCommand({
             id: 'toggle-translation',
             name: '切换翻译状态',
             callback: () => {
-                const newState = !this.translationService.isTranslationEnabled();
-                this.translationService.setEnabled(newState);
+                const newState = !this.translationService.isEnabled;
+                if (newState) {
+                    this.translationService.enable();
+                } else {
+                    this.translationService.disable();
+                }
                 new Notice(`翻译已${newState ? '启用' : '禁用'}`);
             }
         });
 
+        // 切换控制面板
         this.addCommand({
             id: 'toggle-control-panel',
             name: '切换控制面板',
@@ -62,31 +87,37 @@ export default class TranslationPlugin extends Plugin {
             }
         });
 
+        // 切换悬浮球
         this.addCommand({
-            id: 'start-recording',
-            name: '开始记录翻译',
+            id: 'toggle-floating-ball',
+            name: '切换悬浮球',
             callback: () => {
-                if (this.controlWindow) {
-                    this.controlWindow.startRecording();
+                this.settings.showFloatingBall = !this.settings.showFloatingBall;
+                this.saveSettings();
+                
+                if (this.settings.showFloatingBall) {
+                    if (!this.floatingBall) {
+                        this.floatingBall = new FloatingBall(this);
+                    }
+                    this.floatingBall.show();
+                } else {
+                    if (this.floatingBall) {
+                        this.floatingBall.hide();
+                    }
                 }
+                
+                new Notice(`悬浮球已${this.settings.showFloatingBall ? '显示' : '隐藏'}`);
             }
         });
+    }
 
-        this.addCommand({
-            id: 'stop-recording',
-            name: '停止记录翻译',
-            callback: () => {
-                if (this.controlWindow) {
-                    this.controlWindow.stopRecording();
-                }
-            }
-        });
-
-        // 添加状态栏
+    private addStatusBar() {
         const statusBarItem = this.addStatusBarItem();
         statusBarItem.createEl('span', { text: '翻译' });
         statusBarItem.onclick = () => {
-            this.controlWindow.toggle();
+            if (this.controlWindow) {
+                this.controlWindow.toggle();
+            }
         };
     }
 
@@ -101,10 +132,15 @@ export default class TranslationPlugin extends Plugin {
     onunload() {
         // 保存当前状态
         this.translationService.saveTranslationState();
+        
+        // 清理组件
         if (this.controlWindow) {
-            this.controlWindow.close();
             this.controlWindow.destroy();
         }
+        if (this.floatingBall) {
+            this.floatingBall.destroy();
+        }
+        
         console.log('卸载翻译插件');
     }
 
@@ -114,116 +150,46 @@ export default class TranslationPlugin extends Plugin {
             console.log('未找到活动标签');
             return '';
         }
-        
-        // 输出调试信息
-        console.log('当前标签元素:', {
-            element: activeTab,
-            dataTabId: activeTab.getAttribute('data-tab-id'),
-            textContent: activeTab.textContent
-        });
 
         // 从 data-tab-id 获取插件ID
         const tabId = activeTab.getAttribute('data-tab-id');
         if (tabId?.startsWith('plugin-')) {
-            const pluginId = tabId.replace('plugin-', '');
-            console.log('找到插件ID:', pluginId);
-            return pluginId;
+            return tabId.replace('plugin-', '');
         }
         
         // 如果没有 data-tab-id，尝试从插件列表中匹配
         const pluginName = activeTab.textContent?.trim() || '';
         const plugins = (this.app as any).plugins.plugins;
         
-        // 输出所有插件信息用于调试
-        console.log('所有已安装插件:', Object.entries(plugins).map(([id, plugin]) => ({
-            id,
-            name: (plugin as any).manifest.name
-        })));
-
-
-        // 尝试通过名称匹配找到插件ID
         for (const [id, plugin] of Object.entries(plugins) as [string, any][]) {
             if (plugin.manifest.name === pluginName) {
-                console.log('通过名称匹配找到插件ID:', id);
                 return id;
             }
         }
 
-        console.log('未能找到插件ID，使用的插件名称:', pluginName);
         return '';
     }
 
-    // 获取当前激活的插件ID
-    private getActivePluginId(): string | null {
-        // 检查当前激活的设置标签
-        const activeTab = document.querySelector('.vertical-tab-header-group.is-active');
-        if (activeTab) {
-            const tabContent = activeTab.textContent?.trim();
-            if (tabContent) {
-                // 遍历所有已安装的插件
-                const plugins = (this.app as any).plugins.plugins;
-                for (const [id, plugin] of Object.entries(plugins)) {
-                    const manifest = (plugin as Plugin).manifest;
-                    if (manifest.name === tabContent) {
-                        return id;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    // 提供给控制面板使用的方法
     public isTranslationEnabled(): boolean {
-        return this.translationService.isTranslationEnabled();
+        return this.translationService.isEnabled;
     }
 
     public toggleTranslation() {
         const newState = !this.isTranslationEnabled();
-        this.translationService.setEnabled(newState);
+        if (newState) {
+            this.translationService.enable();
+        } else {
+            this.translationService.disable();
+        }
         new Notice(`翻译已${newState ? '启用' : '禁用'}`);
-    }
-
-    public startRecording() {
-        if (this.controlWindow) {
-            this.controlWindow.startRecording();
-        }
-    }
-
-    public stopRecording() {
-        if (this.controlWindow) {
-            this.controlWindow.stopRecording();
-        }
     }
 
     public getAllRules(): TranslationRule[] {
         return this.translationService.getAllRules();
     }
 
-    deleteRules(ruleKeys: string[]) {
-        this.translationService.deleteRules(ruleKeys);
-        this.translationService.saveRules();
-        // 更新控制面板
-        this.controlWindow?.updateRulesList();
+    // 公共方法
+    takeSnapshot() {
+        this.changeRecorder.takeSnapshot();
     }
-
-    updateRule(rule: TranslationRule) {
-        this.translationService.updateRule(rule);
-        this.translationService.saveRules();
-        // 更新控制面板
-        this.controlWindow?.updateRulesList();
-    }
-
-    // 添加公共方法
-    public generateRuleKey(pluginId: string, selector: string, originalText: string): string {
-        return this.translationService.generateRuleKey(pluginId, selector, originalText);
-    }
-}
-
-const DEFAULT_SETTINGS: TranslationPluginSettings = {
-    isEnabled: false,
-};
-
-interface TranslationPluginSettings {
-    isEnabled: boolean;
 }
