@@ -81,8 +81,8 @@ export class ControlWindow {
         this.createControlButtons(controlsContainer);
 
         // 创建搜索栏
-        this.searchBar = new SearchBar(this.containerEl, (searchTerm, pluginId) => {
-            this.updateRulesList(searchTerm, pluginId);
+        this.searchBar = new SearchBar(this.containerEl, (searchTerm) => {
+            this.updateRulesList(searchTerm);
         });
 
         // 创建规则列表
@@ -256,9 +256,9 @@ export class ControlWindow {
         document.onmouseup = null;
     }
 
-    updateRulesList(searchTerm: string = '', selectedPluginId: string = '') {
+    updateRulesList(searchTerm: string = '') {
         const rules = this.plugin.translationService.getAllRules();
-        this.rulesList.updateRules(rules, searchTerm, selectedPluginId);
+        this.rulesList.updateRules(rules, searchTerm);
     }
 
     open() {

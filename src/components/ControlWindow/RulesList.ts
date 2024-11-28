@@ -24,36 +24,27 @@ export class RulesList {
         this.rulesContainer = rulesContainer;
     }
 
-    updateRules(rules: TranslationRule[], searchTerm: string = '', selectedPluginId: string = '') {
-        // 清空现有规则
+    updateRules(rules: TranslationRule[], searchTerm: string = '') {
         this.rulesContainer.empty();
-
-        // 过滤规则
+        
         const filteredRules = rules.filter(rule => {
-            const matchesSearch = searchTerm === '' ||
+            const matchesSearch = searchTerm === '' || 
                 rule.originalText.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 rule.translatedText.toLowerCase().includes(searchTerm.toLowerCase());
-
-            const matchesPlugin = selectedPluginId === '' || rule.pluginId === selectedPluginId;
-
-            return matchesSearch && matchesPlugin;
+            
+            return matchesSearch;
         });
-
-        // 添加规则项
+        
         filteredRules.forEach(rule => {
             const ruleItem = this.createRuleItem(rule);
             this.rulesContainer.appendChild(ruleItem);
         });
-
-        // 如果没有规则，显示提示信息
+        
         if (filteredRules.length === 0) {
-            const emptyMessage = this.rulesContainer.createDiv({
-                text: '没有找到匹配的规则',
-                cls: 'empty-message'
-            });
-            emptyMessage.style.textAlign = 'center';
-            emptyMessage.style.padding = '20px';
-            emptyMessage.style.color = 'var(--text-muted)';
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'translation-rules-empty';
+            emptyMessage.textContent = '没有找到匹配的规则';
+            this.rulesContainer.appendChild(emptyMessage);
         }
     }
 
@@ -83,11 +74,6 @@ export class RulesList {
             cls: 'rule-translated'
         });
 
-        content.createDiv({
-            text: `插件: ${rule.pluginId}`,
-            cls: 'rule-plugin'
-        });
-
         // 创建删除按钮
         const deleteButton = ruleItem.createEl('button', {
             text: '删除',
@@ -104,7 +90,7 @@ export class RulesList {
         `;
 
         deleteButton.onclick = () => {
-            const key = `${rule.pluginId}-${rule.selector}-${rule.originalText}`;
+            const key = `${rule.selector}-${rule.originalText}`;
             this.onDeleteRule(key);
         };
 

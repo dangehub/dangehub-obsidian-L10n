@@ -49,7 +49,6 @@ export class ChangeRecorder {
 
     private compareSnapshots(first: TextNode[], second: TextNode[]): TranslationRule[] {
         const rules: TranslationRule[] = [];
-        const pluginId = this.plugin.translationService.getCurrentPluginId();
 
         // 按深度和位置排序
         first.sort((a, b) => a.depth - b.depth || a.index - b.index);
@@ -61,7 +60,6 @@ export class ChangeRecorder {
                 const element = this.findElementByPath(first[i].path);
                 if (element) {
                     rules.push({
-                        pluginId,
                         selector: generateSelector(element),
                         originalText: first[i].text,
                         translatedText: second[i].text,
@@ -75,12 +73,43 @@ export class ChangeRecorder {
     }
 
     private findElementByPath(path: number[]): Element | null {
-        let current: Node = document.querySelector('.vertical-tab-content-container')!;
-        for (const index of path) {
-            if (!current) return null;
-            current = current.childNodes[index];
+        const container = document.querySelector('.vertical-tab-content-container');
+        if (!container) {
+            console.warn('Container not found');
+            return null;
         }
-        return (current instanceof Element) ? current : current.parentElement;
+
+        let current: Node = container;
+        
+        try {
+            for (const index of path) {
+                if (!current || !current.childNodes || index >= current.childNodes.length) {
+                    console.warn('Invalid path:', {
+                        path,
+                        currentIndex: index,
+                        hasChildNodes: current?.childNodes?.length
+                    });
+                    return null;
+                }
+                current = current.childNodes[index];
+            }
+
+            // 如果当前节点是元素，直接返回
+            if (current instanceof Element) {
+                return current;
+            }
+            
+            // 如果是文本节点，返回其父元素
+            if (current instanceof Text && current.parentElement) {
+                return current.parentElement;
+            }
+
+            console.warn('Node is neither Element nor Text:', current);
+            return null;
+        } catch (error) {
+            console.error('Error in findElementByPath:', error);
+            return null;
+        }
     }
 
     // 公共方法

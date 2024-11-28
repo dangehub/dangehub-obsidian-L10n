@@ -108,10 +108,19 @@ export class TranslationService {
 
     private applyAllRules() {
         const pluginId = this.getCurrentPluginId();
+        if (!pluginId) {
+            console.warn('No plugin ID available');
+            return;
+        }
+
         document.querySelectorAll('*').forEach(element => {
             if (element.textContent?.trim()) {
                 const selector = generateSelector(element);
-                const rule = this.ruleManager.findMatchingRule(pluginId, selector, element.textContent.trim());
+                const rule = this.ruleManager.findMatchingRule(
+                    pluginId,
+                    selector, 
+                    element.textContent.trim()
+                );
                 
                 if (rule) {
                     const key = getElementKey(element);

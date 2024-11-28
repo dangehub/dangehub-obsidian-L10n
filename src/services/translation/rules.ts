@@ -15,7 +15,7 @@ export class RuleManager {
             return;
         }
 
-        const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
+        const key = this.generateRuleKey(rule.selector, rule.originalText);
         this.rules.set(key, rule);
         console.log('Rule added:', rule);
     }
@@ -30,8 +30,8 @@ export class RuleManager {
         );
     }
 
-    generateRuleKey(pluginId: string, selector: string, originalText: string): string {
-        return `${pluginId}-${selector}-${originalText}`;
+    generateRuleKey(selector: string, originalText: string): string {
+        return `${selector}-${originalText}`;
     }
 
     findExistingRuleBySelector(selector: string): TranslationRule | undefined {
@@ -39,12 +39,28 @@ export class RuleManager {
     }
 
     findMatchingRule(pluginId: string, selector: string, originalText: string): TranslationRule | null {
-        const key = this.generateRuleKey(pluginId, selector, originalText);
-        return this.rules.get(key) || null;
+        // 首先按 pluginId 过滤规则
+        const pluginRules = Array.from(this.rules.values()).filter(rule => 
+            rule._pluginId === pluginId
+        );
+
+        // 在过滤后的规则中查找匹配的规则
+        const key = this.generateRuleKey(selector, originalText);
+        const matchingRule = pluginRules.find(rule => 
+            this.generateRuleKey(rule.selector, rule.originalText) === key
+        );
+
+        return matchingRule || null;
     }
 
     getAllRules(): TranslationRule[] {
-        return Array.from(this.rules.values());
+        return Array.from(this.rules.values()).map(({ _pluginId, _version, ...rule }) => rule);
+    }
+
+    getRulesByPluginId(pluginId: string): TranslationRule[] {
+        return Array.from(this.rules.values())
+            .filter(rule => rule._pluginId === pluginId)
+            .map(({ _pluginId, _version, ...rule }) => rule);
     }
 
     deleteRules(ruleKeys: string[]) {
@@ -56,7 +72,7 @@ export class RuleManager {
     }
 
     updateRule(rule: TranslationRule) {
-        const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
+        const key = this.generateRuleKey(rule.selector, rule.originalText);
         if (this.rules.has(key)) {
             this.rules.set(key, rule);
         }
@@ -67,7 +83,7 @@ export class RuleManager {
         const uniqueRules = new Map<string, TranslationRule>();
         
         rules.forEach(rule => {
-            const key = this.generateRuleKey(rule.pluginId, rule.selector, rule.originalText);
+            const key = this.generateRuleKey(rule.selector, rule.originalText);
             if (!uniqueRules.has(key)) {
                 uniqueRules.set(key, rule);
             }

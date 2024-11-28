@@ -21,12 +21,35 @@ export class RuleStorage {
         return `${this.plugin.app.vault.configDir}/plugins/aqu-L10n/translation/${pluginId}/${version}.json`;
     }
 
+    private getRuleFileInfo(filePath: string): { pluginId: string; version: string } {
+        // 从路径中提取 pluginId 和 version
+        // 例如: .obsidian/plugins/aqu-L10n/translation/dataview/0.5.67.json
+        const parts = filePath.split('/');
+        const pluginId = parts[parts.length - 2]; // dataview
+        const version = parts[parts.length - 1].replace('.json', ''); // 0.5.67
+        return { pluginId, version };
+    }
+
     async loadRuleFile(filePath: string): Promise<TranslationRule[]> {
         try {
+            const exists = await this.plugin.app.vault.adapter.exists(filePath);
+            if (!exists) {
+                console.log('Rule file does not exist:', filePath);
+                return [];
+            }
+
             const content = await this.plugin.app.vault.adapter.read(filePath);
-            return JSON.parse(content);
+            const rules = JSON.parse(content) as TranslationRule[];
+            const { pluginId, version } = this.getRuleFileInfo(filePath);
+
+            // 为每个规则添加 pluginId 和 version 属性
+            return rules.map(rule => ({
+                ...rule,
+                _pluginId: pluginId,  // 使用下划线前缀表示这是内部使用的属性
+                _version: version
+            }));
         } catch (error) {
-            console.log('No existing rules file found:', filePath);
+            console.error('Error loading rules:', error);
             return [];
         }
     }
@@ -73,17 +96,41 @@ export class RuleStorage {
         }
     }
 
+    private async mergeRules(existingRules: TranslationRule[], newRules: TranslationRule[]): Promise<TranslationRule[]> {
+        const ruleMap = new Map<string, TranslationRule>();
+        
+        // 使用选择器和原文作为键
+        const getKey = (rule: TranslationRule) => `${rule.selector}|${rule.originalText}`;
+        
+        // 添加现有规则
+        existingRules.forEach(rule => {
+            const { pluginId, ...ruleWithoutId } = rule as any;
+            ruleMap.set(getKey(rule), ruleWithoutId);
+        });
+        
+        // 添加新规则
+        newRules.forEach(rule => {
+            const { pluginId, ...ruleWithoutId } = rule as any;
+            ruleMap.set(getKey(rule), ruleWithoutId);
+        });
+        
+        return Array.from(ruleMap.values());
+    }
+
     async saveRules(rules: TranslationRule[], pluginId: string): Promise<void> {
         try {
             const basePath = await this.ensureTranslationDir(pluginId);
             const filePath = this.getRulesFilePath(pluginId);
             
             const existingRules = await this.loadRuleFile(filePath);
-            const allRules = [...existingRules, ...rules];
+            const mergedRules = await this.mergeRules(existingRules, rules);
+            
+            // 保存时移除内部属性
+            const rulesToSave = mergedRules.map(({ _pluginId, _version, ...rule }) => rule);
             
             await this.plugin.app.vault.adapter.write(
                 filePath,
-                JSON.stringify(allRules, null, 2)
+                JSON.stringify(rulesToSave, null, 2)
             );
             
             console.log('Rules saved successfully');

@@ -2,7 +2,6 @@ export interface TranslationRule {
     selector: string;           // CSS 选择器
     originalText: string;       // 原文
     translatedText: string;     // 译文
-    pluginId: string;          // 所属插件ID
     timestamp?: number;         // 记录时间戳,用于排序和追踪
 }
 
