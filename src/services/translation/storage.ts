@@ -34,7 +34,7 @@ export class RuleStorage {
         try {
             const exists = await this.plugin.app.vault.adapter.exists(filePath);
             if (!exists) {
-                console.log('Rule file does not exist:', filePath);
+                this.plugin.logger.info('Rule file does not exist:', filePath);
                 return [];
             }
 
@@ -43,13 +43,16 @@ export class RuleStorage {
             const { pluginId, version } = this.getRuleFileInfo(filePath);
 
             // 为每个规则添加 pluginId 和 version 属性
-            return rules.map(rule => ({
+            const rulesWithMeta = rules.map(rule => ({
                 ...rule,
-                _pluginId: pluginId,  // 使用下划线前缀表示这是内部使用的属性
+                _pluginId: pluginId,
                 _version: version
             }));
+
+            this.plugin.logger.info('Rules loaded:', rulesWithMeta);
+            return rulesWithMeta;
         } catch (error) {
-            console.error('Error loading rules:', error);
+            this.plugin.logger.error('Error loading rules:', error);
             return [];
         }
     }
@@ -133,9 +136,9 @@ export class RuleStorage {
                 JSON.stringify(rulesToSave, null, 2)
             );
             
-            console.log('Rules saved successfully');
+            this.plugin.logger.info('Rules saved successfully');
         } catch (error) {
-            console.error('Error saving rules:', error);
+            this.plugin.logger.error('Error saving rules:', error);
             new Notice('保存翻译规则失败');
         }
     }

@@ -1,24 +1,79 @@
-import { Plugin, Notice, App, PluginManifest } from 'obsidian';
+import { Plugin, Notice, App, PluginManifest, PluginSettingTab, Setting } from 'obsidian';
 import { TranslationService } from './services/translation';
 import { ChangeRecorder } from './services/recorder';
 import { ControlWindow } from './components/ControlWindow';
 import { FloatingBall } from './components/FloatingBall';
 import { TranslationRule } from './types/TranslationRule';
+import { LoggerService } from './services/logger';
+
+export class AquL10nSettingTab extends PluginSettingTab {
+    plugin: TranslationPlugin;
+
+    constructor(app: App, plugin: TranslationPlugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+
+    display(): void {
+        const { containerEl } = this;
+        containerEl.empty();
+
+        containerEl.createEl('h2', { text: '翻译插件设置' });
+
+        new Setting(containerEl)
+            .setName('启用翻译')
+            .setDesc('开启或关闭翻译功能')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.isEnabled)
+                .onChange(async (value) => {
+                    this.plugin.settings.isEnabled = value;
+                    if (value) {
+                        this.plugin.translationService.enable();
+                    } else {
+                        this.plugin.translationService.disable();
+                    }
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('显示悬浮球')
+            .setDesc('在界面右下角显示翻译控制球')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showFloatingBall)
+                .onChange(async (value) => {
+                    this.plugin.settings.showFloatingBall = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('调试模式')
+            .setDesc('开启后会在控制台输出更多调试信息')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.debugMode)
+                .onChange(async (value) => {
+                    this.plugin.settings.debugMode = value;
+                    await this.plugin.saveSettings();
+                }));
+    }
+}
 
 interface TranslationPluginSettings {
     isEnabled: boolean;
     showFloatingBall: boolean;
+    debugMode: boolean;
 }
 
 const DEFAULT_SETTINGS: TranslationPluginSettings = {
-    isEnabled: false,
+    isEnabled: true,
     showFloatingBall: true,
+    debugMode: false,
 };
 
 export default class TranslationPlugin extends Plugin {
     public controlWindow: ControlWindow | null = null;
     public translationService: TranslationService;
     public changeRecorder: ChangeRecorder;
+    public logger: LoggerService;
     private floatingBall: FloatingBall;
     public settings: TranslationPluginSettings;
 
@@ -29,8 +84,12 @@ export default class TranslationPlugin extends Plugin {
     async onload() {
         console.log('加载翻译插件');
         
+        // 初始化日志服务
+        this.logger = new LoggerService(this);
+
         // 加载设置
         await this.loadSettings();
+        this.logger.setDebugMode(this.settings.debugMode);
         
         // 初始化服务
         this.translationService = new TranslationService(this);
@@ -58,6 +117,9 @@ export default class TranslationPlugin extends Plugin {
 
         // 添加状态栏
         this.addStatusBar();
+
+        // 添加设置选项
+        this.addSettingTab(new AquL10nSettingTab(this.app, this));
     }
 
     private addCommands() {
@@ -127,6 +189,7 @@ export default class TranslationPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+        this.logger.setDebugMode(this.settings.debugMode);
     }
 
     onunload() {

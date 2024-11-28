@@ -75,7 +75,7 @@ export class ChangeRecorder {
     private findElementByPath(path: number[]): Element | null {
         const container = document.querySelector('.vertical-tab-content-container');
         if (!container) {
-            console.warn('Container not found');
+            this.plugin.logger.warn('Container not found');
             return null;
         }
 
@@ -84,7 +84,7 @@ export class ChangeRecorder {
         try {
             for (const index of path) {
                 if (!current || !current.childNodes || index >= current.childNodes.length) {
-                    console.warn('Invalid path:', {
+                    this.plugin.logger.warn('Invalid path:', {
                         path,
                         currentIndex: index,
                         hasChildNodes: current?.childNodes?.length
@@ -104,10 +104,10 @@ export class ChangeRecorder {
                 return current.parentElement;
             }
 
-            console.warn('Node is neither Element nor Text:', current);
+            this.plugin.logger.warn('Node is neither Element nor Text:', current);
             return null;
         } catch (error) {
-            console.error('Error in findElementByPath:', error);
+            this.plugin.logger.error('Error in findElementByPath:', error);
             return null;
         }
     }
@@ -121,24 +121,24 @@ export class ChangeRecorder {
             this.firstSnapshot = currentTexts;
             this.isFirstSnapshot = false;
             new Notice('已捕获原文');
+            this.plugin.logger.info('First snapshot taken', currentTexts);
         } else {
-            // 第二次快照，比较并生成规则
-            const rules = this.compareSnapshots(this.firstSnapshot, currentTexts);
-            
-            // 保存规则
-            rules.forEach(rule => {
-                this.plugin.translationService.addRule(rule);
-            });
-            
-            // 重置状态
-            this.firstSnapshot = [];
-            this.isFirstSnapshot = true;
-
-            if (rules.length > 0) {
-                this.plugin.translationService.saveRules(rules);
+            try {
+                // 第二次快照，比较并生成规则
+                const rules = this.compareSnapshots(this.firstSnapshot, currentTexts);
+                
+                // 保存规则
+                rules.forEach(rule => {
+                    this.plugin.translationService.addRule(rule);
+                });
+                
+                // 重置状态
+                this.clear();
                 new Notice(`已生成 ${rules.length} 条翻译规则`);
-            } else {
-                new Notice('未检测到文本变化');
+                this.plugin.logger.info('Rules generated:', rules);
+            } catch (error) {
+                this.plugin.logger.error('Error capturing translation:', error);
+                new Notice('捕获译文失败');
             }
         }
     }

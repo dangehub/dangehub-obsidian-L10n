@@ -11,13 +11,13 @@ export class RuleManager {
 
     addRule(rule: TranslationRule) {
         if (!this.isValidRule(rule)) {
-            console.warn('Invalid rule:', rule);
+            this.plugin.logger.warn('Invalid rule:', rule);
             return;
         }
 
         const key = this.generateRuleKey(rule.selector, rule.originalText);
         this.rules.set(key, rule);
-        console.log('Rule added:', rule);
+        this.plugin.logger.info('Rule added:', rule);
     }
 
     private isValidRule(rule: TranslationRule): boolean {
@@ -49,6 +49,10 @@ export class RuleManager {
         const matchingRule = pluginRules.find(rule => 
             this.generateRuleKey(rule.selector, rule.originalText) === key
         );
+
+        if (matchingRule) {
+            this.plugin.logger.info('Rule matched:', matchingRule);
+        }
 
         return matchingRule || null;
     }
