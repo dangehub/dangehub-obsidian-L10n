@@ -164,6 +164,25 @@ export class TranslationService {
         this.originalTexts.clear();
     }
 
+    private handleClick(event: MouseEvent) {
+        const target = event.target as Element;
+        if (target.closest('.vertical-tab-nav-item')) {
+            this.plugin.logger.info('检测到设置标签切换');
+            setTimeout(() => {
+                if (this.isEnabled) {
+                    this.plugin.logger.info('重新应用翻译规则');
+                    this.clearOriginalTexts();
+                    this.applyAllRules();
+                }
+            }, 100);
+        }
+    }
+
+    private translateCommandPalette() {
+        // 命令面板翻译逻辑
+        // TODO: 实现命令面板翻译
+    }
+
     // 工具方法
     getCurrentPluginId(): string {
         try {
@@ -233,5 +252,39 @@ export class TranslationService {
     destroy() {
         this.disable();
         this.ruleManager.clear();
+    }
+
+    private detectPluginId(): string {
+        try {
+            // 获取当前活动的插件设置标签
+            const pluginTab = document.querySelector('.plugin-tab-content.is-active');
+            if (pluginTab) {
+                const pluginInfo = pluginTab.querySelector('.plugin-info');
+                if (pluginInfo && pluginInfo.textContent) {
+                    const text = pluginInfo.textContent;
+                    const match = text.match(/^([^(]+)\s*\(([^)]+)\)/);
+                    if (match) {
+                        const [, id, version] = match;
+                        this.plugin.logger.info(`Found plugin: ${id.trim()} (${version.trim()})`);
+                        return id.trim();
+                    }
+                }
+            }
+
+            // 如果在插件设置页面找不到，尝试从其他地方获取
+            const plugins = this.plugin.app.plugins.plugins;
+            for (const [id, plugin] of Object.entries(plugins)) {
+                const elements = document.querySelectorAll(`[data-plugin-id="${id}"]`);
+                if (elements.length > 0) {
+                    this.plugin.logger.info(`Found plugin by element: ${id}`);
+                    return id;
+                }
+            }
+
+            return '';
+        } catch (error) {
+            this.plugin.logger.error('Error getting plugin ID:', error);
+            return '';
+        }
     }
 }
